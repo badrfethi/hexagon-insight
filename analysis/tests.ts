@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 /**
  * The Tests view (#166): one lane per kind of test, and what stands behind each test in it.
  *
- * Everything is read from the files — the ADR for the lanes, the suites' folders for what is in
+ * Everything is read from the files — the suites' folders (`test-kinds.ts`) for what is in
  * them, the program for the doubles and what each steps file builds — and nothing is run, so it
  * answers without waiting on the rules or on a feature. Every code file in a lane's folder is drawn
  * exactly once: a `.feature` as a feature, a steps file beside its feature, a file of Test Doubles
@@ -31,16 +31,16 @@ export interface SharedFile {
   readonly id: string;
   readonly name: string;
   readonly linesOfCode: number;
-  /** As ADR-0031 names each kind, such as `Acceptance test`. */
+  /** As `test-kinds.ts` names each kind, such as `Acceptance test`. */
   readonly usedBy: readonly string[];
 }
 
 export interface TestLane {
-  /** As ADR-0031 names it, such as `Contract test`. */
+  /** As `test-kinds.ts` names it, such as `Contract test`. */
   readonly kind: string;
-  /** Where its tests live, or `null` for a kind the ADR gives no folder. */
-  readonly folder: string | null;
-  /** Why it has no tests, as the ADR says; the page shows it only for a lane with nothing in it. */
+  /** Where its tests live, relative to the root. */
+  readonly folder: string;
+  /** Why it has no tests (`test-kinds.ts`); the page shows it only for a lane with nothing in it. */
   readonly reason: string | null;
   readonly features: readonly TestFeature[];
   readonly doubles: readonly TestDouble[];
@@ -87,28 +87,18 @@ export function testsView(context: AnalysisContext): TestsView {
   return {
     lanes: kinds.map((kind) => ({
       ...kind,
-      ...laneContents(context, kind.folder, files),
+      ...contentsOf(context, kind.folder, files),
     })),
     shared: context.sharedTests.map(({ path, usedBy }) => ({
       id: path,
       name: path,
       linesOfCode: codeLinesIn(posix.join(context.root, path)),
-      usedBy: kinds.filter((kind) => usedBy.includes(kind.folder ?? "")).map((kind) => kind.kind),
+      usedBy: kinds.filter((kind) => usedBy.includes(kind.folder)).map((kind) => kind.kind),
     })),
   };
 }
 
 type Contents = Pick<TestLane, "features" | "doubles" | "support">;
-
-const NOTHING: Contents = { features: [], doubles: [], support: [] };
-
-function laneContents(
-  context: AnalysisContext,
-  folder: string | null,
-  files: readonly string[],
-): Contents {
-  return folder === null ? NOTHING : contentsOf(context, folder, files);
-}
 
 function contentsOf(context: AnalysisContext, folder: string, files: readonly string[]): Contents {
   const own = files.filter((path) => path.startsWith(`${folder}/`));

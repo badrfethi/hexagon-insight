@@ -19,10 +19,6 @@ Given("the groups under {string}", function (this: RulesWorld, path: string) {
   this.groups = groupsUnder(this.context, path);
 });
 
-Given("the adapters under {string}", function (this: RulesWorld, path: string) {
-  this.groups = groupsUnder(this.context, path);
-});
-
 Then(
   "each of them has an interface in {string} or {string}",
   function (this: RulesWorld, one: string, other: string) {

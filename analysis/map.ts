@@ -4,7 +4,6 @@ import { type Break, breaksOf } from "./breaks.js";
 import { type AnalysisContext, createContext } from "./context.js";
 import { externalsIn, externalsOf } from "./externals.js";
 import { codeLinesIn, countLines } from "./lines.js";
-import { managedAdapters } from "./managed.js";
 import type { OutsideBlock } from "./outside.js";
 
 /** The map itself, computed from the working tree for one load, and drawn as soon as it answers. */
@@ -44,12 +43,6 @@ export interface BlockView {
   readonly id: string;
   readonly name: string;
   readonly column: Column;
-  /**
-   * Whether an adapter is managed (`managed.ts`); `null` for a group, which is neither. The page
-   * draws a managed adapter hollow and an unmanaged one filled, so the distinction is readable down
-   * the column without reading a word.
-   */
-  readonly managed: boolean | null;
   /** Non-blank, non-comment lines across the block's files. The block's area is drawn from it. */
   readonly linesOfCode: number;
   /**
@@ -103,7 +96,7 @@ const LANE_OF: Readonly<Record<Column, (context: AnalysisContext, block: Block) 
   outside: () => "outside",
 };
 
-function laneOf(context: AnalysisContext, block: Block): Lane {
+export function laneOf(context: AnalysisContext, block: Block): Lane {
   return LANE_OF[block.column](context, block);
 }
 
@@ -114,7 +107,6 @@ function viewOf(context: AnalysisContext, block: Block): BlockView {
     id: block.id,
     name: block.name,
     column: block.column,
-    managed: block.column === "adapters" ? managedAdapters(context).has(block.name) : null,
     linesOfCode: files.reduce((sum, file) => sum + countLines(file).code, 0),
     externals: externalsOf(files),
   };
@@ -126,7 +118,6 @@ function outsideViewOf(block: OutsideBlock): BlockView {
     id: block.id,
     name: block.name,
     column: block.column,
-    managed: null,
     linesOfCode: block.files.reduce((sum, file) => sum + codeLinesIn(file), 0),
     externals: externalsIn(block.files),
   };

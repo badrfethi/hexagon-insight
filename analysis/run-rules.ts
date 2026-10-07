@@ -1,11 +1,11 @@
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfiguration, runCucumber } from "@cucumber/cucumber/api";
-import { RULES } from "./rules-file.js";
+import { RULES } from "./rules.js";
 
 /**
- * `hexagon-insight rules`: runs the target's rules (`rules-file.ts`) with this package's steps, from
- * the repository it is started in, and exits non-zero when a rule breaks.
+ * `hexagon-insight rules`: runs this package's rules (`rules.ts`) with its steps, over the
+ * repository it is started in, and exits non-zero when a rule breaks.
  *
  * The target's own cucumber configuration file is not read (`file: false`): its `default` profile is
  * the suite its gates run, and a command line's paths are added to a profile's rather than

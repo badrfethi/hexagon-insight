@@ -265,7 +265,7 @@
         border-radius: 5px;
       }
       /* Which blocks a group of keys is about, and the sentence that keeps it from being read wider
-         than it is — managed against unmanaged says nothing outside the outgoing adapters. */
+         than it is. */
       .key-head {
         font-size: 11px;
         font-weight: 600;
@@ -314,8 +314,7 @@
 
       /* ---- Blocks ---------------------------------------------------------------------------- */
 
-      /* The hue says which column a block is in, and the fill whether an adapter is managed: a
-         managed one is drawn hollow. Both are set on the rect itself from the palette in the script,
+      /* The hue says which column a block is in. It is set on the rect itself from the palette in the script,
          as presentation attributes, so that the rules below — which are author CSS — still win for
          a block that is selected, lit or broken. Those say nothing with colour.
 
@@ -335,10 +334,6 @@
       }
       .block:hover .face {
         filter: drop-shadow(0 3px 7px rgb(16 24 40 / 18%));
-      }
-      .block.managed .face {
-        stroke-width: 1.5;
-        stroke-dasharray: 5 3;
       }
       .block.lit .face {
         stroke: var(--ink);
@@ -516,7 +511,7 @@
         background: #e4e9f3;
         border-color: #7f92b3;
       }
-      /* Real rather than faked is drawn as the map draws a managed adapter: hollow, dashed. */
+      /* Real rather than faked is drawn hollow and dashed. */
       .tblock.real {
         background: #fff;
         border: 1.5px dashed #8e97a3;
@@ -671,13 +666,11 @@
       const CORNER = 10;
 
       // One hue per column, so the kind of a block is readable at a glance. `fill` is the block's
-      // face and `edge` its outline; a managed adapter is drawn hollow in the same hue, so the hue
-      // says which column and the fill says managed or not. Nothing about selection is a hue.
+      // face and `edge` its outline. Nothing about selection is a hue.
       //
       // The seven are one family, not seven colours: every face sits at the same lightness and the
       // same low chroma, and every edge is the same face darkened, so no column shouts louder than
-      // its neighbour and the edge still holds its own against a white face when an adapter is drawn
-      // hollow. They read as hues of one material, which is what keeps the map calm at six columns.
+      // its neighbour and the edge still holds its own against a white face. They read as hues of one material, which is what keeps the map calm at six columns.
       const HUES = {
         "incoming-adapters": { fill: "#dde7f3", edge: "#7593b8" },
         staff: { fill: "#dfeadb", edge: "#7d9f74" },
@@ -685,7 +678,6 @@
         "outgoing-adapters": { fill: "#e6e1f1", edge: "#8e82b4" },
         outside: { fill: "#e6e8ec", edge: "#8e97a3" },
       };
-      const HOLLOW = "#ffffff";
 
       // One arrowhead per kind, in the kind's own colour, which is the colour the stylesheet gives
       // the line. `checked-by` is drawn as an open chevron rather than a solid head, so it reads
@@ -878,23 +870,13 @@
         );
       }
 
-      // A managed adapter is hollow rather than filled, and keeps its hue in the outline. The fill
-      // is white rather than none so that the whole block is still clickable.
       function hueOf(lane) {
         return HUES[lane] ?? { fill: "#eceff2", edge: "#8c959f" };
       }
 
-      // Managed against unmanaged is a distinction *among the outgoing adapters* and nowhere else.
-      // An incoming adapter drives the terminal and is always managed — the operator has never seen
-      // an unmanaged one — so drawing it hollow would offer a contrast that cannot exist, and invite
-      // the reader to look for the other kind. It is drawn like any other block.
-      function hollow(block, lane) {
-        return lane === "outgoing-adapters" && block.managed === true;
-      }
-
       function faceOf(block, lane) {
         const hue = hueOf(lane);
-        return { fill: hollow(block, lane) ? HOLLOW : hue.fill, stroke: hue.edge };
+        return { fill: hue.fill, stroke: hue.edge };
       }
 
       function faceNodes(block, lane, place) {
@@ -914,7 +896,6 @@
       function classesOf(block, lane, broken, lit) {
         return [
           "block",
-          hollow(block, lane) ? "managed" : "",
           block.id === selectedBlock ? "selected" : "",
           lit ? "lit" : "",
           broken ? "broken" : "",
@@ -934,11 +915,10 @@
         return `${block.scenarios} runs once the outlines expand · ${block.linesOfCode} lines`;
       }
 
-      function tooltip(block, lane) {
-        const word = hollow(block, lane) ? ", managed" : "";
+      function tooltip(block) {
         const outside =
           block.externals.length === 0 ? "" : `\nOutside: ${block.externals.join(", ")}`;
-        return `${block.name} — ${sizeText(block)}${word}${outside}`;
+        return `${block.name} — ${sizeText(block)}${outside}`;
       }
 
       // ---- Labels --------------------------------------------------------------------------------
@@ -1054,7 +1034,7 @@
           ...pillNodes(block, place),
           ...labelNodes(block, place),
         );
-        group.append(svg("title", {}, tooltip(block, lane)));
+        group.append(svg("title", {}, tooltip(block)));
         group.addEventListener("click", (event) => {
           event.stopPropagation();
           selectBlock(block.id);
@@ -1146,29 +1126,26 @@
         return el("div", { class: "key" }, sample, el("span", {}, text));
       }
 
-      function swatch(lane, hollowed) {
+      function swatch(lane) {
         const hue = hueOf(lane);
-        const style = `background: ${hollowed ? HOLLOW : hue.fill}; border: ${
-          hollowed ? "1.5px dashed" : "1px solid"
-        } ${hue.edge}`;
+        const style = `background: ${hue.fill}; border: 1px solid ${hue.edge}`;
         return el("span", { class: "swatch", style });
       }
 
       function laneRows() {
-        const hues = map.columns.map((column) => keyRow(swatch(column.lane, false), column.title));
+        const hues = map.columns.map((column) => keyRow(swatch(column.lane), column.title));
         const strip =
-          map.strip.length > 0 ? [keyRow(swatch("outside", false), "Outside the groups")] : [];
+          map.strip.length > 0 ? [keyRow(swatch("outside"), "Outside the groups")] : [];
         return [...hues, ...strip];
       }
 
-      // Managed and unmanaged is an outgoing adapter's distinction and no one else's, so the key
-      // says whose it is instead of leaving it to be read as a property of every block on the map.
+      // Which kind of test checks an adapter follows from its lane (`rules.feature`), so the key
+      // says it once per lane rather than marking every adapter.
       function fillRows() {
         return [
-          el("div", { class: "key-head" }, "Outgoing adapters"),
-          keyRow(swatch("outgoing-adapters", false), "unmanaged — a contract feature checks it"),
-          keyRow(swatch("outgoing-adapters", true), "managed — ours to version, so no contract"),
-          el("div", { class: "key-note" }, "An incoming adapter is always managed."),
+          el("div", { class: "key-head" }, "Adapters"),
+          keyRow(swatch("incoming-adapters"), "incoming — an entry point test checks it"),
+          keyRow(swatch("outgoing-adapters"), "outgoing — a contract test checks it"),
         ];
       }
 
@@ -1613,7 +1590,7 @@
           group(doubleRows()),
           group([
             keyRow(tsample("support"), "runs in every test of its kind"),
-            keyRow(tsample("support real"), "real (managed) — run for real, not faked"),
+            keyRow(tsample("support real"), "real — run for real, not faked"),
             keyRow(tsample("shared"), "shared by the suites — no one kind owns it"),
             keyRow(tsample("empty-lane"), "kind with no tests, and why"),
           ]),

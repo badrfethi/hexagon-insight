@@ -8,12 +8,14 @@ import { firstSentence } from "./test-kinds.js";
 /**
  * A Test Double at an outgoing port, drawn on the Tests view as a block of its own (#166).
  *
- * A Test Double is a class in a suite's support code that implements an outgoing port (ADR-0032):
- * that is what it stands in for, so it is found by what it does rather than by the file it is in.
- * Its kind is read from the first sentence of its doc comment, where each double says what it is —
- * "The Clip provider: a Fake, and a Spy." — because its name cannot say it: `FakeClipProvider` is a
- * Spy too. The words are Meszaros's, the vocabulary `CONTEXT.md` takes its kinds from, so there is
- * no list here of which double is which.
+ * What a Test Double is belongs to this tool, and is stated in `README.md` (_Test Doubles_): a
+ * class in a suite's support code that implements a port, incoming or outgoing. That is what it
+ * stands in for, so it is found by what it does rather than by the file it is in. Only the doubles
+ * at outgoing ports are found so far, the acceptance suite's; an entry point test's double at an
+ * incoming port is not drawn yet (#11). Its kind is one or more of
+ * Meszaros's Dummy, Stub, Spy, Mock and Fake, named by the double itself in the first sentence of
+ * its doc comment — "The Clip provider: a Fake, and a Spy." — because its name cannot say it:
+ * `FakeClipProvider` is a Spy too. So there is no list here of which double is which.
  */
 export interface TestDouble {
   /** Its file and class, such as `features/support/doubles.ts#FakeClipProvider`, unique on the view. */
@@ -98,8 +100,8 @@ function kindsIn(summary: string): readonly string[] {
  * class the suite's world builds for every scenario, which implements no port (#166).
  *
  * A double is found by the port it stands at, so what the world builds and stands at no port is
- * the real thing — a managed dependency, run for real in the suite (ADR-0023), such as the media
- * host serving Source Videos over real HTTP. It is found by what the world does, not listed.
+ * the real thing — a dependency run for real in the suite, such as the media host serving Source
+ * Videos over real HTTP. It is found by what the world does, not listed.
  */
 export function realFilesIn(
   context: AnalysisContext,

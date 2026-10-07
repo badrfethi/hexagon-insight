@@ -1,132 +1,50 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { posix } from "node:path";
 
 /**
- * One kind of test as ADR-0031 names it, the folder its tests live in, and why it has none.
+ * One kind of test, the folder at the target's root its tests live in, and why it has none.
  *
- * The Tests view draws a lane per kind (#166). What a lane holds and why an empty one is empty are
- * read from the ADR rather than written here, because the ADR is where they are decided: its table
- * says where each kind lives, `—` for a kind with no folder, and a bullet under it says why each
- * empty kind is empty. A kind that gains a folder in the table fills its lane with no change to
- * insight, and one whose reason is reworded says so on the next load.
+ * The four kinds and their folders are the tool's, not the target's (#8): a test goes to its kind by
+ * what it fakes, and to that kind's folder. The Tests view draws a lane per kind (#166), and a
+ * target holds its tests in these folders and nowhere else.
+ *
+ * - **Entry point test**, `entry-points/`: an incoming adapter's outer surface, with the incoming
+ *   port faked.
+ * - **Acceptance test**, `features/`: an incoming port driven with a Test Double at each outgoing
+ *   port.
+ * - **Core test**, `core-tests/`: one piece of core logic, faking nothing.
+ * - **Contract test**, `contracts/`: what an adapter and its Test Double assume about the real
+ *   supplier, faking nothing.
+ *
+ * `features/` is required of a target; the other three are optional, and a missing one means that
+ * kind has no tests, not that the target is wrong.
  */
 export interface TestKind {
-  /** As the table's `Kind` column writes it, such as `Acceptance test`. */
+  /** Such as `Acceptance test`. */
   readonly kind: string;
-  /** The folder its tests live in, relative to the root and without a slash; `null` for `—`. */
-  readonly folder: string | null;
-  /** The ADR's sentence for why it has no tests, such as "No core tests, because …"; `null` if none. */
+  /** The folder its tests live in, relative to the root and without a slash. */
+  readonly folder: string;
+  /** Why it has no tests, such as "No `entry-points/` folder."; `null` when its folder is there. */
   readonly reason: string | null;
 }
 
-const ADRS = "docs/adr";
-const KINDS_ADR = /^0031-.*\.md$/;
-
 /**
  * The kinds in the order the Tests view reads, outside in: what a Client meets, the hexagon through
- * its incoming port, its core, and the suppliers at the far side (#165, decision 4). It is the only
- * thing about the kinds insight states itself; a kind the ADR adds and this does not order comes last.
+ * its incoming port, its core, and the suppliers at the far side (#165, decision 4).
  */
-const ORDER = ["Entry point test", "Acceptance test", "Core test", "Contract test"];
+const KINDS: readonly Pick<TestKind, "kind" | "folder">[] = [
+  { kind: "Entry point test", folder: "entry-points" },
+  { kind: "Acceptance test", folder: "features" },
+  { kind: "Core test", folder: "core-tests" },
+  { kind: "Contract test", folder: "contracts" },
+];
 
 export function testKinds(root: string): readonly TestKind[] {
-  const lines = adrLines(root);
-  const reasons = bullets(lines);
-
-  return tableRows(lines)
-    .map((row) => ({
-      kind: row.kind,
-      folder: folderIn(row.lives),
-      reason: reasonFor(row, reasons),
-    }))
-    .sort((one, other) => rank(one.kind) - rank(other.kind));
-}
-
-function adrLines(root: string): readonly string[] {
-  const folder = posix.join(root, ADRS);
-  const name = existsSync(folder)
-    ? readdirSync(folder).find((file) => KINDS_ADR.test(file))
-    : undefined;
-
-  return name === undefined ? [] : readFileSync(posix.join(folder, name), "utf8").split("\n");
-}
-
-function rank(kind: string): number {
-  const index = ORDER.indexOf(kind);
-
-  return index < 0 ? ORDER.length : index;
-}
-
-interface Row {
-  readonly kind: string;
-  readonly lives: string;
-}
-
-/** The rows of the table whose header has a `Kind` and a `Lives in` column. */
-function tableRows(lines: readonly string[]): readonly Row[] {
-  const start = lines.findIndex((line) => isRow(line) && cellsOf(line).includes("Lives in"));
-  const header = cellsOf(lines[start] ?? "");
-  const rows = start < 0 ? [] : bodyOf(lines.slice(start + 1));
-
-  return rows.map((cells) => ({
-    kind: cells[header.indexOf("Kind")] ?? "",
-    lives: cells[header.indexOf("Lives in")] ?? "",
+  return KINDS.map(({ kind, folder }) => ({
+    kind,
+    folder,
+    reason: existsSync(posix.join(root, folder)) ? null : `No \`${folder}/\` folder.`,
   }));
-}
-
-function bodyOf(lines: readonly string[]): readonly (readonly string[])[] {
-  const end = lines.findIndex((line) => !isRow(line));
-
-  return (end < 0 ? lines : lines.slice(0, end))
-    .map(cellsOf)
-    .filter((cells) => !cells.every((cell) => /^-+$/.test(cell)));
-}
-
-function isRow(line: string): boolean {
-  return line.trimStart().startsWith("|");
-}
-
-function cellsOf(line: string): readonly string[] {
-  return line
-    .trim()
-    .split("|")
-    .slice(1, -1)
-    .map((cell) => cell.trim());
-}
-
-/** `` `features/` `` is the folder `features`; `—`, or anything that is not a path, is none. */
-function folderIn(cell: string): string | null {
-  return /^`(?<path>[^`]+?)\/?`$/.exec(cell)?.groups?.path ?? null;
-}
-
-/** The ADR's bullets, each joined onto one line with its emphasis dropped. */
-function bullets(lines: readonly string[]): readonly string[] {
-  return lines
-    .reduce<readonly string[]>(joinBullet, [])
-    .map((bullet) => bullet.replaceAll("**", "").replaceAll("`", ""));
-}
-
-/** A line opening `- ` starts a bullet, an indented one carries on the last, and others are not bullets. */
-function joinBullet(joined: readonly string[], line: string): readonly string[] {
-  if (line.startsWith("- ")) {
-    return [...joined, line.slice(2)];
-  }
-
-  return line.startsWith("  ") ? carriedOn(joined, line) : joined;
-}
-
-function carriedOn(joined: readonly string[], line: string): readonly string[] {
-  const last = joined.at(-1);
-
-  return last === undefined ? joined : [...joined.slice(0, -1), `${last} ${line.trim()}`];
-}
-
-/** The first sentence of the bullet that opens "No <kind> tests", such as "No core tests, because …". */
-function reasonFor(row: Row, reasons: readonly string[]): string | null {
-  const opening = `No ${row.kind.replace(/ test$/, "").toLowerCase()} tests`;
-  const bullet = reasons.find((reason) => reason.startsWith(opening));
-
-  return bullet === undefined ? null : firstSentence(bullet);
 }
 
 /** Up to the first full stop that ends a sentence: one followed by a capital, or by nothing. */

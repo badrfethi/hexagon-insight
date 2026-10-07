@@ -1,76 +1,71 @@
 import { posix } from "node:path";
-import { type DataTable, Given, Then } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 import type { Block } from "../analysis/blocks.js";
 import type { AnalysisContext } from "../analysis/context.js";
-import { contractFeaturesOf } from "../analysis/contracts.js";
+import { featuresRunning } from "../analysis/contracts.js";
+import { type Lane, laneOf } from "../analysis/map.js";
 import { refuseAny, type RulesWorld } from "./world.js";
 
 /**
- * The Rule that holds an unmanaged adapter to a contract feature and a managed one to none
- * (ADR-0019, ADR-0023).
+ * The Rule that pairs each adapter with the kind of test its lane calls for: an outgoing adapter
+ * with a contract test, an incoming one with an entry point test, and neither with the other.
  *
- * Which adapters are managed is the operator's call, listed in the Background; every other folder
- * under `src/adapters` is unmanaged. An adapter is run by a contract feature when that feature's
- * steps construct it, which is what `contractFeaturesOf` answers for the map as well.
+ * The lane is the map's (`laneOf`): an adapter is incoming when it references an incoming port, and
+ * outgoing otherwise. An adapter is run by a feature when that feature's steps construct it, which
+ * is what `featuresRunning` answers for the map as well. A folder the target does not have runs
+ * nothing, so an adapter whose lane calls for it breaks.
  */
 
-const ADAPTERS = "src/adapters";
+const LANES: Readonly<Record<string, Lane>> = {
+  incoming: "incoming-adapters",
+  outgoing: "outgoing-adapters",
+};
 
-Given("the managed adapters are:", function (this: RulesWorld, table: DataTable) {
-  const names = table.hashes().map((row) => row.adapter ?? "");
-  const folders = new Set(adaptersOf(this.context).map(nameOf));
-  this.managed = new Set(names);
+Given(
+  "the {word} adapters under {string}",
+  function (this: RulesWorld, direction: string, path: string) {
+    // An unknown word selects no lane, so every Then after it would pass over nothing.
+    const lane = Object.hasOwn(LANES, direction) ? LANES[direction] : undefined;
+    refuseAny(lane === undefined ? [`${path}: "${direction}" is not incoming or outgoing`] : []);
+    this.direction = direction;
+    this.groups = adaptersUnder(this.context, path).filter(
+      (adapter) => laneOf(this.context, adapter) === lane,
+    );
+  },
+);
+
+Then("each of them is run by a feature under {string}", function (this: RulesWorld, path: string) {
   refuseAny(
-    names
-      .filter((name) => !folders.has(name))
-      .map((name) => `${ADAPTERS}/${name}: is listed as managed, but is not an adapter`),
+    this.groups
+      .filter((adapter) => featuresOf(this.context, adapter, path).length === 0)
+      .map(
+        (adapter) =>
+          `src/${adapter.id}: is an ${this.direction} adapter, and no feature under ${path} runs it`,
+      ),
   );
 });
 
-Then(
-  "each unmanaged one is run by a feature under {string}",
-  function (this: RulesWorld, path: string) {
-    refuseAny(
-      this.groups
-        .filter((adapter) => !this.managed.has(nameOf(adapter)))
-        .filter((adapter) => featuresRunning(this.context, adapter, path).length === 0)
-        .map((adapter) => `src/${adapter.id}: is unmanaged, and no feature under ${path} runs it`),
-    );
-  },
-);
-
-Then(
-  "no managed one is run by a feature under {string}",
-  function (this: RulesWorld, path: string) {
-    refuseAny(
-      this.groups
-        .filter((adapter) => this.managed.has(nameOf(adapter)))
-        .flatMap((adapter) =>
-          featuresRunning(this.context, adapter, path).map(
-            (feature) => `src/${adapter.id}: is managed, but ${feature} runs it`,
-          ),
-        ),
-    );
-  },
-);
-
-function adaptersOf(context: AnalysisContext): readonly Block[] {
-  return context.blocks.filter(
-    (block) => posix.dirname(context.relative(block.directory)) === ADAPTERS,
+Then("none of them is run by a feature under {string}", function (this: RulesWorld, path: string) {
+  refuseAny(
+    this.groups.flatMap((adapter) =>
+      featuresOf(this.context, adapter, path).map(
+        (feature) => `src/${adapter.id}: is an ${this.direction} adapter, but ${feature} runs it`,
+      ),
+    ),
   );
-}
+});
 
-function nameOf(block: Block): string {
-  return posix.basename(block.directory);
+/** The adapters directly under a path, refusing a path with none, so a moved folder cannot pass vacuously. */
+function adaptersUnder(context: AnalysisContext, path: string): readonly Block[] {
+  const under = context.blocks.filter(
+    (block) => posix.dirname(context.relative(block.directory)) === path,
+  );
+  refuseAny(under.length === 0 ? [`${path}: holds no adapters`] : []);
+
+  return under;
 }
 
 /** The paths of the features under `path` whose steps construct the adapter. */
-function featuresRunning(
-  context: AnalysisContext,
-  adapter: Block,
-  path: string,
-): readonly string[] {
-  return contractFeaturesOf(context, adapter)
-    .map((feature) => feature.path)
-    .filter((feature) => feature.startsWith(`${path}/`));
+function featuresOf(context: AnalysisContext, adapter: Block, path: string): readonly string[] {
+  return featuresRunning(context, adapter, path).map((feature) => feature.path);
 }

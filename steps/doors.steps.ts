@@ -3,8 +3,8 @@ import { scenarioDoors } from "../analysis/feature-runs.js";
 import { refuseAny, type RulesWorld } from "./world.js";
 
 /**
- * The Rule that every acceptance scenario comes in through an incoming port (ADR-0031, amended by
- * ADR-0032; #168).
+ * The Rule that every acceptance scenario comes in through an incoming port (`rules.feature`,
+ * #168).
  *
  * Which door a scenario came in is measured by running it (`feature-runs.ts`, `doors.ts`), so this
  * Given runs the acceptance suite once, each feature on its own. A scenario that came in no door is
