@@ -1,0 +1,37 @@
+{
+  "name": "hexagon-insight",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hexagon architecture map and rule checks for staff/suppliers repos",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "bin": {
+    "hexagon-insight": "bin/hexagon-insight.js"
+  },
+  "files": [
+    "bin",
+    "analysis",
+    "steps",
+    "server.ts",
+    "page.html"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@cucumber/cucumber": "^12.2.0",
+    "@cucumber/gherkin": ">=38.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^12.2.0",
+    "@cucumber/gherkin": "38.0.0",
+    "@types/node": "^24.7.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

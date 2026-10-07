@@ -1,0 +1,1791 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>insight — clipper</title>
+    <style>
+      /* Plain CSS, no framework and no font to fetch: the page has to draw the same with the
+         network unplugged, because that is how it is read. Everything below is one restrained
+         family — a neutral paper, white panels, and lane hues at the same lightness so that the
+         column a block is in reads as a difference in hue alone. */
+      :root {
+        --paper: #eceef2;
+        --surface: #fff;
+        --canvas: #f7f8fa;
+        --ink: #1b1f24;
+        --muted: #667085;
+        --faint: #98a2b3;
+        --hair: rgb(16 24 40 / 9%);
+        --raise: 0 1px 2px rgb(16 24 40 / 6%), 0 6px 16px rgb(16 24 40 / 5%);
+        --depends: #6b7280;
+        --implements: #3f6fae;
+        --references: #7f6cb3;
+        --checked-by: #3f8f68;
+        --bad: #bf3b4e;
+        --bad-tint: #fdf3f4;
+        --radius: 14px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      /* A view that is switched away is hidden, never redrawn: the map keeps its selection and its
+         drawing while the other view is open, because nothing of it is touched. */
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink);
+        background: var(--paper);
+        height: 100vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ---- Header ---------------------------------------------------------------------------- */
+
+      header {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 20px 12px;
+        background: var(--surface);
+        box-shadow: 0 1px 0 var(--hair);
+      }
+      header h1 {
+        font-size: 17px;
+        font-weight: 620;
+        letter-spacing: -0.015em;
+        margin: 0;
+      }
+      header .sub {
+        color: var(--faint);
+        font-size: 12px;
+      }
+      header .status {
+        color: var(--muted);
+        font-size: 12px;
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+      }
+      button {
+        font: inherit;
+        font-size: 12px;
+        color: var(--ink);
+        padding: 5px 13px;
+        border: 1px solid var(--hair);
+        border-radius: 9px;
+        background: var(--surface);
+        cursor: pointer;
+        transition:
+          background 0.14s ease,
+          box-shadow 0.14s ease,
+          transform 0.14s ease;
+      }
+      button:hover {
+        background: #f4f6f9;
+        box-shadow: 0 1px 3px rgb(16 24 40 / 10%);
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+
+      /* The two views, side by side as one control: the pressed one is the one on screen. */
+      .views {
+        display: flex;
+        gap: 2px;
+        margin-left: 14px;
+        padding: 2px;
+        border-radius: 10px;
+        background: #eef0f4;
+      }
+      .views button {
+        border-color: transparent;
+        background: transparent;
+      }
+      .views button[aria-pressed="true"] {
+        background: var(--surface);
+        box-shadow: 0 1px 2px rgb(16 24 40 / 12%);
+        font-weight: 600;
+      }
+
+      /* ---- Layout ---------------------------------------------------------------------------- */
+
+      .layout {
+        display: grid;
+        grid-template-columns: 258px minmax(0, 1fr);
+        gap: 18px;
+        padding: 18px;
+        min-height: 0;
+      }
+      aside {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        overflow: auto;
+        min-height: 0;
+      }
+      #map {
+        overflow: auto;
+        border-radius: var(--radius);
+        background: var(--canvas);
+        box-shadow:
+          inset 0 0 0 1px var(--hair),
+          var(--raise);
+      }
+
+      /* ---- Panels ---------------------------------------------------------------------------- */
+
+      .panel {
+        flex: none;
+        background: var(--surface);
+        border-radius: var(--radius);
+        padding: 15px 16px 16px;
+        box-shadow: var(--raise);
+      }
+      /* The legend keeps its whole height; only the breaks scroll, and only when there are many. */
+      .panel.breaks {
+        max-height: 46%;
+        overflow: auto;
+      }
+      .panel.alert {
+        background: var(--bad-tint);
+        box-shadow:
+          inset 0 0 0 1px rgb(191 59 78 / 22%),
+          var(--raise);
+      }
+      h2 {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 12px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--faint);
+      }
+      .count {
+        margin-left: auto;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: #eef0f4;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .count.alert {
+        background: var(--bad);
+        color: #fff;
+      }
+      .calm {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      /* ---- What is selected ------------------------------------------------------------------ */
+
+      /* Clicking a block answers the question its view cannot fit inside it: on the map, what it
+         leans on outside this repository; on Tests, a feature's scenarios or what a file builds.
+         It takes the top of the column so that the answer is where the eye already is. */
+      .panel.selection {
+        max-height: 52%;
+        overflow: auto;
+      }
+      .subject {
+        margin: 0 0 1px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .subject-note {
+        margin: 0 0 11px;
+        color: var(--faint);
+        font-size: 11px;
+      }
+      ol.scenarios {
+        margin: 0;
+        padding-left: 19px;
+        font-size: 12px;
+        color: #39414d;
+      }
+      ol.scenarios li {
+        padding: 2px 0;
+      }
+      ul.deps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      ul.deps li {
+        padding: 2px 8px;
+        border-radius: 7px;
+        background: #eef0f4;
+        color: #39414d;
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 11px;
+      }
+
+      /* ---- Legend ---------------------------------------------------------------------------- */
+
+      .key-group + .key-group {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--hair);
+      }
+      .key {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 3px 0;
+        font-size: 12px;
+        color: #39414d;
+      }
+      .swatch {
+        flex: none;
+        width: 26px;
+        height: 15px;
+        border-radius: 5px;
+      }
+      /* Which blocks a group of keys is about, and the sentence that keeps it from being read wider
+         than it is — managed against unmanaged says nothing outside the outgoing adapters. */
+      .key-head {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+        padding-bottom: 2px;
+      }
+      .key-note {
+        font-size: 11px;
+        color: var(--faint);
+        padding-top: 3px;
+      }
+      .sample {
+        flex: none;
+        overflow: visible;
+      }
+
+      /* ---- Breaks ---------------------------------------------------------------------------- */
+
+      .break {
+        padding: 9px 11px;
+        border-radius: 10px;
+        border-left: 3px solid var(--bad);
+        background: rgb(255 255 255 / 70%);
+        cursor: pointer;
+        transition: background 0.14s ease;
+      }
+      .break + .break {
+        margin-top: 9px;
+      }
+      .break:hover {
+        background: #fff;
+      }
+      .break strong {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .break .where {
+        color: var(--muted);
+        font-size: 11px;
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      }
+      .break .what {
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      /* ---- Blocks ---------------------------------------------------------------------------- */
+
+      /* The hue says which column a block is in, and the fill whether an adapter is managed: a
+         managed one is drawn hollow. Both are set on the rect itself from the palette in the script,
+         as presentation attributes, so that the rules below — which are author CSS — still win for
+         a block that is selected, lit or broken. Those say nothing with colour.
+
+         A block is a card: soft corners, a hairline of its own hue, and a shadow that lifts under
+         the pointer. Every state change is a short transition, so selecting reads as a movement
+         rather than a redraw. */
+      .block {
+        cursor: pointer;
+      }
+      .block .face {
+        stroke-width: 1;
+        filter: drop-shadow(0 1px 1.5px rgb(16 24 40 / 10%));
+        transition:
+          stroke-width 0.14s ease,
+          filter 0.14s ease,
+          opacity 0.2s ease;
+      }
+      .block:hover .face {
+        filter: drop-shadow(0 3px 7px rgb(16 24 40 / 18%));
+      }
+      .block.managed .face {
+        stroke-width: 1.5;
+        stroke-dasharray: 5 3;
+      }
+      .block.lit .face {
+        stroke: var(--ink);
+        stroke-width: 2;
+      }
+      .block.selected .face {
+        stroke: var(--ink);
+        stroke-width: 2.5;
+        filter: drop-shadow(0 4px 10px rgb(16 24 40 / 26%));
+      }
+      .block.broken .face {
+        stroke: var(--bad);
+        stroke-width: 2.5;
+      }
+      .block .name {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        fill: var(--ink);
+      }
+      .block .size {
+        font-size: 10.5px;
+        fill: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      /* How many packages and Node modules a block imports, in its top corner. A block with one
+         arrow leaving it and ten libraries behind it is not the simple thing the arrows make it
+         look, and this is the only mark on the map that says so. */
+      .block .pill {
+        fill: rgb(16 24 40 / 8%);
+        pointer-events: none;
+      }
+      .block .pill-text {
+        font-size: 10px;
+        font-weight: 600;
+        fill: #55607a;
+        font-variant-numeric: tabular-nums;
+        text-anchor: middle;
+        pointer-events: none;
+      }
+      .heading {
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        fill: var(--faint);
+      }
+      /* One sentence under a heading, for the one row on the map whose reason for existing is not
+         obvious from its contents. */
+      .note {
+        font-size: 11px;
+        fill: var(--muted);
+      }
+
+      /* ---- Tests ----------------------------------------------------------------------------- */
+
+      /* One lane per kind of test, left to right as the view reads (#166). A lane is a column of
+         cards like the map's, each as tall as its lines of code; what stands behind a lane's
+         features is gathered in boxes under them. A feature is a sheet of paper in its suite's hue,
+         and everything that is code is a filled card. */
+      #tests {
+        display: grid;
+        gap: 34px;
+        align-items: start;
+        padding: 30px 34px 40px;
+        overflow: auto;
+        border-radius: var(--radius);
+        background: var(--canvas);
+        box-shadow:
+          inset 0 0 0 1px var(--hair),
+          var(--raise);
+      }
+      .lane {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-width: 0;
+      }
+      .lane h3 {
+        margin: 0;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--faint);
+      }
+      .lane .where {
+        margin: -9px 0 2px;
+        color: var(--faint);
+        font-size: 11px;
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        align-items: start;
+      }
+      .box {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 10px;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px dashed rgb(16 24 40 / 16%);
+      }
+      .box-title {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      /* What the suites share sits under every lane, because no one lane owns it. */
+      .box.shared-row {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        margin-top: 0;
+      }
+      .shared-row .box-title {
+        flex-basis: 100%;
+      }
+      .shared-row .tblock {
+        flex: 0 1 280px;
+      }
+      .tblock {
+        position: relative;
+        overflow: hidden;
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 1px solid;
+        cursor: pointer;
+        box-shadow: 0 1px 1.5px rgb(16 24 40 / 10%);
+        transition:
+          box-shadow 0.14s ease,
+          border-color 0.14s ease;
+      }
+      .tblock:hover {
+        box-shadow: 0 3px 7px rgb(16 24 40 / 18%);
+      }
+      .tblock .tname {
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 14px;
+        overflow-wrap: anywhere;
+      }
+      .tblock .size {
+        font-size: 10.5px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      /* A feature is a sheet: a pale face with its corner turned down in the suite's full hue. */
+      .tblock.acceptance {
+        background: linear-gradient(225deg, #d8e9e6 0 11px, #f4fafa 11px);
+        border-color: #6d9e97;
+      }
+      .tblock.contract {
+        background: linear-gradient(225deg, #f2dfe2 0 11px, #fdf7f8 11px);
+        border-color: #b1838a;
+      }
+      .tblock.steps {
+        background: #f2dfe2;
+        border-color: #b1838a;
+      }
+      .tblock.double {
+        background: #f3ecd9;
+        border-color: #b59c62;
+      }
+      .tblock.support {
+        background: #e6e8ec;
+        border-color: #8e97a3;
+      }
+      .tblock.shared {
+        background: #e4e9f3;
+        border-color: #7f92b3;
+      }
+      /* Real rather than faked is drawn as the map draws a managed adapter: hollow, dashed. */
+      .tblock.real {
+        background: #fff;
+        border: 1.5px dashed #8e97a3;
+      }
+      .tblock.selected {
+        border-color: var(--ink);
+        box-shadow:
+          0 0 0 1.5px var(--ink),
+          0 4px 10px rgb(16 24 40 / 26%);
+      }
+      .tblock.broken {
+        border-color: var(--bad);
+        box-shadow: 0 0 0 1.5px var(--bad);
+      }
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+      }
+      .badge {
+        padding: 0 7px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 16px;
+        background: rgb(16 24 40 / 8%);
+        color: #55607a;
+      }
+      .badge.real {
+        background: #eef0f4;
+      }
+      .for {
+        margin-top: 3px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      /* A kind with no tests: an empty lane, dashed, saying why in the ADR's own words. */
+      .empty-lane {
+        padding: 14px;
+        border-radius: 12px;
+        border: 1.5px dashed rgb(16 24 40 / 18%);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      /* The legend samples are the blocks' own classes at a twentieth of the size, so the key cannot
+         draw something the view does not. */
+      .tsample {
+        flex: none;
+        width: 26px;
+        height: 15px;
+        padding: 0;
+        border-radius: 5px;
+        box-shadow: none;
+        cursor: default;
+      }
+      .tsample.acceptance,
+      .tsample.contract {
+        background-size: 100% 100%;
+      }
+      .tsample.acceptance {
+        background: linear-gradient(225deg, #d8e9e6 0 5px, #f4fafa 5px);
+      }
+      .tsample.contract {
+        background: linear-gradient(225deg, #f2dfe2 0 5px, #fdf7f8 5px);
+      }
+      .tsample.empty-lane {
+        border-width: 1.5px;
+      }
+      .tsample.broken {
+        background: #fff;
+      }
+      .adapters {
+        margin: 0;
+        padding-left: 19px;
+        font-size: 12px;
+        color: #39414d;
+      }
+      .adapters li {
+        padding: 2px 0;
+      }
+      .adapters code {
+        font-size: 11px;
+      }
+
+      /* ---- Arrows ---------------------------------------------------------------------------- */
+
+      .arrow {
+        fill: none;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+      }
+      .arrow.depends-on {
+        stroke: var(--depends);
+      }
+      .arrow.implements {
+        stroke: var(--implements);
+        stroke-dasharray: 6 4;
+      }
+      .arrow.references {
+        stroke: var(--references);
+      }
+      .arrow.checked-by {
+        stroke: var(--checked-by);
+        stroke-dasharray: 1.5 4.5;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- The header carries the title, the switch between the two views and the state of the load,
+         nothing else: each view's key lives in the panel on its left, where each entry is a sample
+         of the real thing. The map is the hexagon; the tests that drive it and check its adapters
+         are a view of their own beside it (#165), so neither has to be read through the other. -->
+    <header>
+      <h1>insight</h1>
+      <span class="sub">clipper</span>
+      <nav class="views" aria-label="View">
+        <button type="button" data-view="map" aria-pressed="true">Map</button>
+        <button type="button" data-view="tests" aria-pressed="false">Tests</button>
+      </nav>
+      <span class="status" id="status">Loading…</span>
+      <button id="reload" type="button">Reload</button>
+    </header>
+    <div class="layout" id="map-view">
+      <aside id="side"></aside>
+      <main id="map"></main>
+    </div>
+    <div class="layout" id="tests-view" hidden>
+      <aside id="tests-side"></aside>
+      <main id="tests"></main>
+    </div>
+    <script>
+      "use strict";
+
+      // Everything drawn here comes from /map.json and /tests.json, computed from the working tree
+      // on each load. Neither runs a feature: the map waits only on the rules its breaks come from,
+      // and Tests reads the files and answers first.
+      //
+      // Nothing is drawn as an arrow until a block is clicked: it shows its own arrows and lights
+      // the blocks at their other ends. Clicking the same block again clears.
+
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const COLUMN_WIDTH = 196;
+      const COLUMN_GAP = 96;
+      const MARGIN = 48;
+      const BLOCK_GAP = 12;
+      const MIN_HEIGHT = 40;
+      const STRIP_GAP = 68;
+      const STRIP_HEIGHT = 58;
+      const STRIP_MIN_WIDTH = 120;
+      const LOOP = 70;
+      const CORNER = 10;
+
+      // One hue per column, so the kind of a block is readable at a glance. `fill` is the block's
+      // face and `edge` its outline; a managed adapter is drawn hollow in the same hue, so the hue
+      // says which column and the fill says managed or not. Nothing about selection is a hue.
+      //
+      // The seven are one family, not seven colours: every face sits at the same lightness and the
+      // same low chroma, and every edge is the same face darkened, so no column shouts louder than
+      // its neighbour and the edge still holds its own against a white face when an adapter is drawn
+      // hollow. They read as hues of one material, which is what keeps the map calm at six columns.
+      const HUES = {
+        "incoming-adapters": { fill: "#dde7f3", edge: "#7593b8" },
+        staff: { fill: "#dfeadb", edge: "#7d9f74" },
+        suppliers: { fill: "#f0e6d6", edge: "#b1976f" },
+        "outgoing-adapters": { fill: "#e6e1f1", edge: "#8e82b4" },
+        outside: { fill: "#e6e8ec", edge: "#8e97a3" },
+      };
+      const HOLLOW = "#ffffff";
+
+      // One arrowhead per kind, in the kind's own colour, which is the colour the stylesheet gives
+      // the line. `checked-by` is drawn as an open chevron rather than a solid head, so it reads
+      // apart from the other three at a glance as well as by its dotted line.
+      const HEADS = {
+        implements: { color: "#3f6fae", solid: true, word: "implements" },
+        "depends-on": { color: "#6b7280", solid: true, word: "depends on" },
+        references: { color: "#7f6cb3", solid: true, word: "references" },
+        "checked-by": { color: "#3f8f68", solid: false, word: "is checked by" },
+      };
+
+      let map;
+      let selectedBlock = null;
+
+      function el(tag, attributes, ...children) {
+        const node = document.createElement(tag);
+        Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, value));
+        node.append(...children);
+        return node;
+      }
+
+      function svg(tag, attributes, ...children) {
+        const node = document.createElementNS(SVG_NS, tag);
+        Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, value));
+        node.append(...children);
+        return node;
+      }
+
+      // ---- What is lit -------------------------------------------------------------------------
+
+      function shownArrows() {
+        if (!selectedBlock) return [];
+        return map.arrows.filter(
+          (arrow) => arrow.from === selectedBlock || arrow.to === selectedBlock,
+        );
+      }
+
+      function litBlocks(arrows) {
+        if (!selectedBlock) return new Set();
+        return new Set([selectedBlock, ...arrows.flatMap((arrow) => [arrow.from, arrow.to])]);
+      }
+
+      // ---- Map -----------------------------------------------------------------------------------
+
+      // `columnXs` is where each column starts, so no other maths has to know the widths.
+      function columnWidth() {
+        return COLUMN_WIDTH;
+      }
+
+      function columnXs() {
+        return map.columns.map((column, index) => MARGIN + index * (COLUMN_WIDTH + COLUMN_GAP));
+      }
+
+      function mapWidth() {
+        const widths = map.columns.reduce((sum, column) => sum + columnWidth(column), 0);
+        return MARGIN * 2 + widths + Math.max(map.columns.length - 1, 0) * COLUMN_GAP;
+      }
+
+      // A block's area is drawn from its lines of code, so where the code is can be read off the map
+      // without reading a word: every block is one column wide, and as tall as a floor plus its own
+      // share. One scale serves the whole map — comparing two blocks is comparing two heights — and
+      // it is the largest that still fits the fullest column on screen. Each column is centred
+      // against the tallest.
+      function heightOf(block, scale) {
+        return MIN_HEIGHT + block.linesOfCode * scale;
+      }
+
+      function spanOf(column, scale) {
+        const blocks = column.blocks.reduce((sum, block) => sum + heightOf(block, scale), 0);
+        return blocks + Math.max(column.blocks.length - 1, 0) * BLOCK_GAP;
+      }
+
+      function scaleFor(column, available) {
+        const floors = column.blocks.length * MIN_HEIGHT + (column.blocks.length - 1) * BLOCK_GAP;
+        const lines = column.blocks.reduce((sum, block) => sum + block.linesOfCode, 0);
+        return Math.max(available - floors, 100) / Math.max(lines, 1);
+      }
+
+      function heightScale() {
+        const available = Math.max(window.innerHeight - 150, 640);
+        return Math.min(...map.columns.map((column) => scaleFor(column, available)));
+      }
+
+      function layoutColumns(places, scale) {
+        const spans = map.columns.map((column) => spanOf(column, scale));
+        const tallest = Math.max(...spans);
+        const xs = columnXs();
+        map.columns.forEach((column, index) => {
+          let y = MARGIN + (tallest - spans[index]) / 2;
+          column.blocks.forEach((block) => {
+            const height = heightOf(block, scale);
+            places.set(block.id, {
+              x: xs[index],
+              y,
+              width: columnWidth(column),
+              height,
+              column: index,
+            });
+            y += height + BLOCK_GAP;
+          });
+        });
+        return MARGIN + tallest;
+      }
+
+      // The row under the columns is the same idea lying down: each block is one row tall and as
+      // wide as its share of the row's lines of code, over a floor wide enough to read its name.
+      // Its blocks are in no column, so no arrow starts or ends at one.
+      function layoutStrip(places, top) {
+        const gaps = Math.max(map.strip.length - 1, 0) * BLOCK_GAP;
+        const floors = map.strip.length * STRIP_MIN_WIDTH;
+        const lines = map.strip.reduce((sum, block) => sum + block.linesOfCode, 0);
+        const spare = Math.max(mapWidth() - MARGIN * 2 - gaps - floors, 0);
+        let x = MARGIN;
+        map.strip.forEach((block) => {
+          const width = STRIP_MIN_WIDTH + (spare * block.linesOfCode) / Math.max(lines, 1);
+          places.set(block.id, { x, y: top, width, height: STRIP_HEIGHT, column: -1 });
+          x += width + BLOCK_GAP;
+        });
+      }
+
+      function layout() {
+        const places = new Map();
+        const bottom = layoutColumns(places, heightScale());
+        const stripTop = bottom + STRIP_GAP;
+        layoutStrip(places, stripTop);
+        return { places, stripTop };
+      }
+
+      // Each arrow leaves and enters a block's side at its own height, spread along that side and
+      // ordered by where its other end is, so arrows sharing a block do not sit on top of each other.
+      function sideOf(place, other) {
+        if (place.column === other.column) return place.column === 0 ? "left" : "right";
+        return other.column > place.column ? "right" : "left";
+      }
+
+      function anchors(arrows, places) {
+        const ends = new Map();
+        const add = (key, entry) => ends.set(key, [...(ends.get(key) ?? []), entry]);
+        arrows.forEach((arrow, index) => {
+          const from = places.get(arrow.from);
+          const to = places.get(arrow.to);
+          add(`${arrow.from} ${sideOf(from, to)}`, { index, end: "from", toward: to });
+          add(`${arrow.to} ${sideOf(to, from)}`, { index, end: "to", toward: from });
+        });
+        const points = arrows.map(() => ({}));
+        ends.forEach((entries, key) => {
+          const [id, side] = key.split(" ");
+          const place = places.get(id);
+          entries.sort((one, other) => one.toward.y - other.toward.y);
+          entries.forEach((entry, position) => {
+            points[entry.index][entry.end] = {
+              x: side === "right" ? place.x + place.width : place.x,
+              y: place.y + (place.height * (position + 1)) / (entries.length + 1),
+              direction: side === "right" ? 1 : -1,
+            };
+          });
+        });
+        return points;
+      }
+
+      function arrowPath({ from, to }) {
+        const reach = from.direction === to.direction ? LOOP : Math.abs(to.x - from.x) / 2;
+        return (
+          `M ${from.x} ${from.y} C ${from.x + from.direction * reach} ${from.y}, ` +
+          `${to.x + to.direction * reach} ${to.y}, ${to.x} ${to.y}`
+        );
+      }
+
+      // `prefix` keeps the map's heads and the legend's samples from sharing an id: the map's svg is
+      // replaced on every draw, and a legend sample pointing into a discarded one would lose its head.
+      function marker(kind, prefix) {
+        const head = HEADS[kind];
+        return svg(
+          "marker",
+          {
+            id: `${prefix}-${kind}`,
+            viewBox: "0 0 10 10",
+            refX: "10",
+            refY: "5",
+            markerWidth: "7",
+            markerHeight: "7",
+            orient: "auto-start-reverse",
+          },
+          svg("path", {
+            d: head.solid ? "M 0 0 L 10 5 L 0 10 z" : "M 0 0 L 10 5 L 0 10",
+            fill: head.solid ? head.color : "none",
+            stroke: head.color,
+            "stroke-width": head.solid ? "0" : "2",
+          }),
+        );
+      }
+
+      // A managed adapter is hollow rather than filled, and keeps its hue in the outline. The fill
+      // is white rather than none so that the whole block is still clickable.
+      function hueOf(lane) {
+        return HUES[lane] ?? { fill: "#eceff2", edge: "#8c959f" };
+      }
+
+      // Managed against unmanaged is a distinction *among the outgoing adapters* and nowhere else.
+      // An incoming adapter drives the terminal and is always managed — the operator has never seen
+      // an unmanaged one — so drawing it hollow would offer a contrast that cannot exist, and invite
+      // the reader to look for the other kind. It is drawn like any other block.
+      function hollow(block, lane) {
+        return lane === "outgoing-adapters" && block.managed === true;
+      }
+
+      function faceOf(block, lane) {
+        const hue = hueOf(lane);
+        return { fill: hollow(block, lane) ? HOLLOW : hue.fill, stroke: hue.edge };
+      }
+
+      function faceNodes(block, lane, place) {
+        return [
+          svg("rect", {
+            class: "face",
+            x: place.x,
+            y: place.y,
+            width: place.width,
+            height: place.height,
+            rx: CORNER,
+            ...faceOf(block, lane),
+          }),
+        ];
+      }
+
+      function classesOf(block, lane, broken, lit) {
+        return [
+          "block",
+          hollow(block, lane) ? "managed" : "",
+          block.id === selectedBlock ? "selected" : "",
+          lit ? "lit" : "",
+          broken ? "broken" : "",
+        ];
+      }
+
+      // What a block says about itself under its name: its size.
+      function sizeText(block) {
+        return `${block.linesOfCode} lines`;
+      }
+
+      // Cucumber counts an outline once per Examples row, so a file of 46 scenarios can report 72.
+      // Said only where the two differ, because everywhere else it would be noise. Tests says it of
+      // a feature it lists the scenarios of.
+      function runsText(block) {
+        if (block.scenarios === block.scenarioNames.length) return `${block.linesOfCode} lines`;
+        return `${block.scenarios} runs once the outlines expand · ${block.linesOfCode} lines`;
+      }
+
+      function tooltip(block, lane) {
+        const word = hollow(block, lane) ? ", managed" : "";
+        const outside =
+          block.externals.length === 0 ? "" : `\nOutside: ${block.externals.join(", ")}`;
+        return `${block.name} — ${sizeText(block)}${word}${outside}`;
+      }
+
+      // ---- Labels --------------------------------------------------------------------------------
+
+      // A name is drawn inside its block or not at all. The map has to carry both kinds at once —
+      // `claude-metadata-generator`, and a feature called "yt-dlp still claims and downloads a Source
+      // Video the way the yt-dlp media source reads it" — so rather than trusting either to fit, a
+      // name is wrapped to its block's width, given as many lines as the block's height leaves over
+      // the size line beneath it, and cut with an ellipsis when it still runs on. The whole name is
+      // always in the block's tooltip, so the cut loses nothing.
+      //
+      // Widths are measured with a canvas rather than guessed from the letter count: a guess that is
+      // a few per cent light is a name over the edge of its block, which is the thing this is here to
+      // stop.
+      const RULER = document.createElement("canvas").getContext("2d");
+      const NAME_FONT = `600 12px ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif`;
+      const LINE_HEIGHT = 14;
+      const PAD = 12;
+
+      function fits(text, width) {
+        RULER.font = NAME_FONT;
+        return RULER.measureText(text).width <= width;
+      }
+
+      // Where a name may break: at whitespace, and after a hyphen — which is what lets
+      // `claude-metadata-` / `generator` wrap instead of running out of its block.
+      function words(name) {
+        return name
+          .split(/\s+/)
+          .flatMap((word) => word.split(/(?<=-)/))
+          .filter((word) => word !== "");
+      }
+
+      function wrap(name, width) {
+        const lines = [];
+        let line = "";
+        for (const word of words(name)) {
+          const joined = line.endsWith("-") ? line + word : `${line} ${word}`;
+          if (line === "") line = word;
+          else if (fits(joined, width)) line = joined;
+          else {
+            lines.push(line);
+            line = word;
+          }
+        }
+        return line === "" ? lines : [...lines, line];
+      }
+
+      function ellipsis(line, width) {
+        let cut = line;
+        while (cut.length > 1 && !fits(`${cut}…`, width)) cut = cut.slice(0, -1);
+        return `${cut}…`;
+      }
+
+      // How many lines of name a block has room for: its height, less the padding above it and the
+      // size line that always sits under it. Every block keeps at least one, however small it is.
+      function nameRows(place) {
+        return Math.max(1, Math.floor((place.height - PAD - LINE_HEIGHT) / LINE_HEIGHT));
+      }
+
+      function nameLines(name, place) {
+        const width = place.width - PAD * 2;
+        const rows = nameRows(place);
+        const lines = wrap(name, width);
+        if (lines.length <= rows) return lines;
+        return [...lines.slice(0, rows - 1), ellipsis(lines[rows - 1].trimEnd(), width)];
+      }
+
+      // The count of what a block imports from outside this repository, in its top right corner —
+      // empty blocks get nothing at all, so the mark only appears where there is weight to see.
+      const PILL = { width: 22, height: 15 };
+
+      function pillNodes(block, place) {
+        if (block.externals.length === 0) return [];
+        const x = place.x + place.width - PILL.width - 9;
+        const y = place.y + 8;
+        return [
+          svg("rect", { class: "pill", x, y, width: PILL.width, height: PILL.height, rx: 7 }),
+          svg(
+            "text",
+            { class: "pill-text", x: x + PILL.width / 2, y: y + 11 },
+            String(block.externals.length),
+          ),
+        ];
+      }
+
+      // A name shares the top of its block with that count, so it gives up the room the count takes
+      // rather than running under it.
+      function labelWidth(block, place) {
+        const reserved = block.externals.length === 0 ? 0 : PILL.width + 9;
+        return { ...place, width: place.width - reserved };
+      }
+
+      function labelNodes(block, place) {
+        const lines = nameLines(block.name, labelWidth(block, place));
+        const at = (index) => place.y + 18 + index * LINE_HEIGHT;
+        return [
+          ...lines.map((line, index) =>
+            svg("text", { class: "name", x: place.x + PAD, y: at(index) }, line),
+          ),
+          svg("text", { class: "size", x: place.x + PAD, y: at(lines.length) }, sizeText(block)),
+        ];
+      }
+
+      function blockNode(block, lane, place, broken, lit) {
+        const group = svg(
+          "g",
+          {
+            class: classesOf(block, lane, broken, lit).join(" ").replace(/\s+/g, " ").trim(),
+            "data-id": block.id,
+          },
+          ...faceNodes(block, lane, place),
+          ...pillNodes(block, place),
+          ...labelNodes(block, place),
+        );
+        group.append(svg("title", {}, tooltip(block, lane)));
+        group.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectBlock(block.id);
+        });
+        return group;
+      }
+
+      // The map lists the breaks about the hexagon's structure; those that name a test are on Tests.
+      function mapBreaks() {
+        return map.breaks.filter((broken) => broken.view === "map");
+      }
+
+      function brokenIds() {
+        return new Set(mapBreaks().flatMap((broken) => broken.blocks));
+      }
+
+      function title(x, y, text) {
+        return svg("text", { class: "heading", x, y }, text);
+      }
+
+      // The row under the columns is the only thing on the map whose heading does not explain it, so
+      // it gets the sentence that does: these blocks are here because every tracked code file has to
+      // land somewhere, which is what lets the map and Tests together be read as complete.
+      const STRIP_NOTE =
+        "Every code file git tracks is in some block, here or on Tests. These belong to no group " +
+        "and are no test: the composition root, the configuration, the fixtures, and this tool.";
+
+      function headings(root, stripTop) {
+        const xs = columnXs();
+        map.columns.forEach((column, index) => {
+          root.append(title(xs[index], MARGIN - 18, column.title));
+        });
+        if (map.strip.length === 0) return;
+        root.append(title(MARGIN, stripTop - 34, "Outside the groups"));
+        root.append(svg("text", { class: "note", x: MARGIN, y: stripTop - 16 }, STRIP_NOTE));
+      }
+
+      function edgeOf(places) {
+        const ends = [...places.values()];
+        return {
+          right: Math.max(...ends.map((place) => place.x + place.width)),
+          bottom: Math.max(...ends.map((place) => place.y + place.height)),
+        };
+      }
+
+      function drawMap() {
+        const { places, stripTop } = layout();
+        const arrows = shownArrows();
+        const lit = litBlocks(arrows);
+        const points = anchors(arrows, places);
+        const broken = brokenIds();
+        const edge = edgeOf(places);
+        const root = svg("svg", {
+          width: Math.max(mapWidth(), edge.right + MARGIN),
+          height: edge.bottom + MARGIN,
+        });
+        root.append(svg("defs", {}, ...Object.keys(HEADS).map((kind) => marker(kind, "head"))));
+        headings(root, stripTop);
+        arrows.forEach((arrow, index) => {
+          const path = svg("path", {
+            d: arrowPath(points[index]),
+            class: `arrow ${arrow.kind}`,
+            "marker-end": `url(#head-${arrow.kind})`,
+          });
+          path.append(svg("title", {}, `${arrow.from} ${arrow.kind} ${arrow.to}`));
+          root.append(path);
+        });
+        const drawn = map.columns.flatMap((column) =>
+          column.blocks.map((block) => ({ block, lane: column.lane })),
+        );
+        [...drawn, ...map.strip.map((block) => ({ block, lane: "outside" }))].forEach(
+          ({ block, lane }) => {
+            const place = places.get(block.id);
+            root.append(blockNode(block, lane, place, broken.has(block.id), lit.has(block.id)));
+          },
+        );
+        root.addEventListener("click", () => clearSelection());
+        document.getElementById("map").replaceChildren(root);
+      }
+
+      // ---- Side list -----------------------------------------------------------------------------
+
+      // The whole key lives here, on the left of the map and always in view. Every entry is a
+      // sample of the thing itself — the swatch is the block's own fill and edge, the arrow is the
+      // real line with its real head — so the key cannot drift from what the map draws by being
+      // described in words instead. Only the columns the map drew are listed, so an empty one says
+      // nothing here either.
+      function keyRow(sample, text) {
+        return el("div", { class: "key" }, sample, el("span", {}, text));
+      }
+
+      function swatch(lane, hollowed) {
+        const hue = hueOf(lane);
+        const style = `background: ${hollowed ? HOLLOW : hue.fill}; border: ${
+          hollowed ? "1.5px dashed" : "1px solid"
+        } ${hue.edge}`;
+        return el("span", { class: "swatch", style });
+      }
+
+      function laneRows() {
+        const hues = map.columns.map((column) => keyRow(swatch(column.lane, false), column.title));
+        const strip =
+          map.strip.length > 0 ? [keyRow(swatch("outside", false), "Outside the groups")] : [];
+        return [...hues, ...strip];
+      }
+
+      // Managed and unmanaged is an outgoing adapter's distinction and no one else's, so the key
+      // says whose it is instead of leaving it to be read as a property of every block on the map.
+      function fillRows() {
+        return [
+          el("div", { class: "key-head" }, "Outgoing adapters"),
+          keyRow(swatch("outgoing-adapters", false), "unmanaged — a contract feature checks it"),
+          keyRow(swatch("outgoing-adapters", true), "managed — ours to version, so no contract"),
+          el("div", { class: "key-note" }, "An incoming adapter is always managed."),
+        ];
+      }
+
+      // The count in a block's corner, drawn as the map draws it.
+      function pillSample() {
+        return svg(
+          "svg",
+          { class: "sample", width: 26, height: 15 },
+          svg("rect", { class: "pill", x: 2, y: 0, width: 22, height: 15, rx: 7 }),
+          svg("text", { class: "pill-text", x: 13, y: 11 }, "3"),
+        );
+      }
+
+      function outsideRows() {
+        return [
+          keyRow(pillSample(), "packages and Node modules it imports"),
+          el("div", { class: "key-note" }, "Click a block to read them."),
+        ];
+      }
+
+      // A 46×14 slice of the real arrow: the stylesheet gives it its colour and dashes, and its own
+      // marker gives it its head.
+      function arrowSample(kind) {
+        return svg(
+          "svg",
+          { class: "sample", width: 46, height: 14 },
+          svg("defs", {}, marker(kind, "legend")),
+          svg("line", {
+            x1: 1,
+            y1: 7,
+            x2: 38,
+            y2: 7,
+            class: `arrow ${kind}`,
+            "marker-end": `url(#legend-${kind})`,
+          }),
+        );
+      }
+
+      function arrowRows() {
+        return Object.entries(HEADS).map(([kind, head]) => keyRow(arrowSample(kind), head.word));
+      }
+
+      function group(rows) {
+        return el("div", { class: "key-group" }, ...rows);
+      }
+
+      function legendPanel() {
+        return el(
+          "section",
+          { class: "panel" },
+          el("h2", {}, "Legend"),
+          group(laneRows()),
+          group(fillRows()),
+          group(arrowRows()),
+          group(outsideRows()),
+        );
+      }
+
+      // Breaks are their own area rather than a tail on the key: they are the one thing on this page
+      // that asks for something to be done. Calm at nought, and the whole panel takes the warning
+      // colour the moment there is one.
+      function breakItems(breaks) {
+        if (breaks.length === 0) return [el("p", { class: "calm" }, "Every rule holds.")];
+        return breaks.map((broken) => {
+          const item = el(
+            "div",
+            { class: "break" },
+            el("strong", {}, broken.rule),
+            el("div", { class: "where" }, broken.file),
+            el("div", { class: "what" }, broken.message),
+          );
+          if (broken.blocks.length > 0) {
+            item.addEventListener("click", () => selectBlock(broken.blocks[0]));
+          }
+          return item;
+        });
+      }
+
+      function breaksPanel() {
+        const breaks = mapBreaks();
+        const alert = breaks.length > 0 ? " alert" : "";
+        return el(
+          "section",
+          { class: `panel breaks${alert}` },
+          el("h2", {}, "Breaks", el("span", { class: `count${alert}` }, String(breaks.length))),
+          ...breakItems(breaks),
+        );
+      }
+
+      // ---- What is selected ----------------------------------------------------------------------
+
+      // The map draws a block at the size of its code and says its name; what it cannot fit inside
+      // a block is what the block leans on outside this repository. That is answered here, on
+      // selection, rather than in a panel that is always open and always mostly irrelevant.
+      function blockAt(id) {
+        const drawn = [...map.columns.flatMap((column) => column.blocks), ...map.strip];
+        return drawn.find((block) => block.id === id);
+      }
+
+      function scenarioList(block) {
+        return el(
+          "ol",
+          { class: "scenarios" },
+          ...block.scenarioNames.map((name) => el("li", {}, name)),
+        );
+      }
+
+      // A block with nothing outside it is worth saying out loud: it is the hexagon's own claim
+      // about itself, and seven of the supplier groups can make it.
+      function dependencyList(block) {
+        if (block.externals.length === 0) {
+          return el("p", { class: "calm" }, "Nothing outside this repository.");
+        }
+        return el("ul", { class: "deps" }, ...block.externals.map((name) => el("li", {}, name)));
+      }
+
+      function selectionPanel() {
+        const block = blockAt(selectedBlock ?? "");
+        if (block === undefined) return [];
+        return [
+          el(
+            "section",
+            { class: "panel selection" },
+            el(
+              "h2",
+              {},
+              "Depends on",
+              el("span", { class: "count" }, String(block.externals.length)),
+            ),
+            el("p", { class: "subject" }, block.name),
+            el(
+              "p",
+              { class: "subject-note" },
+              "packages and Node modules, outside this repository",
+            ),
+            dependencyList(block),
+          ),
+        ];
+      }
+
+      function drawSide() {
+        document
+          .getElementById("side")
+          .replaceChildren(...selectionPanel(), legendPanel(), breaksPanel());
+      }
+
+      // ---- Selection -----------------------------------------------------------------------------
+
+      function selectBlock(id) {
+        selectedBlock = selectedBlock === id ? null : id;
+        drawSide();
+        drawMap();
+      }
+
+      function clearSelection() {
+        selectedBlock = null;
+        drawSide();
+        drawMap();
+      }
+
+      // ---- Tests ---------------------------------------------------------------------------------
+
+      // One lane per kind of test, from /tests.json, which reads the files and runs nothing, so it
+      // answers before the map. What is in each lane and why an empty one is empty come from the
+      // payload; the page only says what each lane's boxes are called. Its breaks are the map's,
+      // those that name a test: they ride on /map.json, so they arrive when the map does.
+      const EVERY = { "Acceptance test": "scenario", "Contract test": "contract" };
+      const COUNTS = [
+        "none",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+      ];
+
+      let tests;
+      let selectedTest = null;
+
+      function laneTitle(lane) {
+        return lane.kind.replace(/ test$/, "");
+      }
+
+      function everyOf(lane) {
+        return EVERY[lane.kind] ?? "test";
+      }
+
+      function countWord(count) {
+        return COUNTS[count] ?? String(count);
+      }
+
+      function isEmpty(lane) {
+        return lane.features.length + lane.doubles.length + lane.support.length === 0;
+      }
+
+      // Every block the view draws, flat, each with the style it is drawn in and the file it is
+      // in, which is what a break names.
+      function testEntries() {
+        const lanes = (tests?.lanes ?? []).flatMap((lane) => [
+          ...lane.features.flatMap((feature) => featureEntries(lane, feature)),
+          ...lane.doubles.map((double) => ({ style: "double", file: double.file, block: double })),
+          ...lane.support.map((file) => ({
+            style: file.real ? "support real" : "support",
+            file: file.id,
+            block: file,
+          })),
+        ]);
+        return [...lanes, ...sharedEntries()];
+      }
+
+      function sharedEntries() {
+        return (tests?.shared ?? []).map((file) => ({
+          style: "shared",
+          file: file.id,
+          block: file,
+        }));
+      }
+
+      function featureEntries(lane, feature) {
+        const style = lane.features.some((one) => one.steps) ? "contract" : "acceptance";
+        const own = { style, file: feature.id, block: feature };
+        if (!feature.steps) return [own];
+        return [own, { style: "steps", file: feature.steps.id, block: feature.steps }];
+      }
+
+      function testEntryAt(id) {
+        return testEntries().find((entry) => entry.block.id === id);
+      }
+
+      function testBreaks() {
+        return (map?.breaks ?? []).filter((broken) => broken.view === "tests");
+      }
+
+      // A break marks a block it names by file, and a steps file whose adapter it names.
+      function marks(broken, entry) {
+        const file = broken.file.replace(/:\d+$/, "");
+        const adapters = entry.block.adapters ?? [];
+        return entry.file === file || adapters.some((one) => broken.blocks.includes(one.block));
+      }
+
+      function marked(broken) {
+        return testEntries().filter((entry) => marks(broken, entry));
+      }
+
+      function testBrokenIds() {
+        return new Set(testBreaks().flatMap((broken) => marked(broken).map((e) => e.block.id)));
+      }
+
+      // One scale for the whole view, as on the map: the largest that fits the fullest lane.
+      function laneLines(lane) {
+        const features = lane.features.map((one) =>
+          Math.max(one.linesOfCode, one.steps?.linesOfCode ?? 0),
+        );
+        const rest = [...lane.doubles, ...lane.support].map((one) => one.linesOfCode);
+        return {
+          lines: [...features, ...rest].reduce((sum, n) => sum + n, 0),
+          count: features.length + rest.length,
+        };
+      }
+
+      function testScale() {
+        const available = Math.max(window.innerHeight - 260, 640);
+        const scales = tests.lanes
+          .filter((lane) => !isEmpty(lane))
+          .map((lane) => {
+            const { lines, count } = laneLines(lane);
+            return Math.max(available - count * (MIN_HEIGHT + 10), 100) / Math.max(lines, 1);
+          });
+        return Math.min(1, ...scales);
+      }
+
+      function testSize(block) {
+        const lines = `${block.linesOfCode} lines`;
+        if (!block.scenarioNames) return lines;
+        return `${block.scenarioNames.length} scenarios · ${lines}`;
+      }
+
+      function badgesOf(entry) {
+        const kinds = entry.block.kinds ?? [];
+        const real = entry.block.real ? ["real"] : [];
+        const badges = [...kinds, ...real].map((word) =>
+          el("span", { class: `badge ${word === "real" ? "real" : ""}` }, word),
+        );
+        return badges.length === 0 ? [] : [el("div", { class: "badges" }, ...badges)];
+      }
+
+      function portLine(entry) {
+        const ports = entry.block.ports ?? [];
+        return ports.length === 0 ? [] : [el("div", { class: "for" }, `for ${ports.join(", ")}`)];
+      }
+
+      function usedByLine(entry) {
+        const kinds = (entry.block.usedBy ?? []).map((kind) => kind.replace(/ test$/, ""));
+        return kinds.length === 0
+          ? []
+          : [el("div", { class: "for" }, `used by ${kinds.join(", ")}`)];
+      }
+
+      function tblockClasses(entry, broken) {
+        return [
+          "tblock",
+          entry.style,
+          entry.block.id === selectedTest ? "selected" : "",
+          broken.has(entry.block.id) ? "broken" : "",
+        ].join(" ");
+      }
+
+      function tblockNode(entry, scale, broken) {
+        const node = el(
+          "div",
+          {
+            class: tblockClasses(entry, broken).replace(/\s+/g, " ").trim(),
+            style: `min-height: ${MIN_HEIGHT + entry.block.linesOfCode * scale}px`,
+            title: entry.block.name,
+          },
+          el("div", { class: "tname" }, entry.block.name),
+          el("div", { class: "size" }, testSize(entry.block)),
+          ...badgesOf(entry),
+          ...portLine(entry),
+          ...usedByLine(entry),
+        );
+        node.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectTest(entry.block.id);
+        });
+        return node;
+      }
+
+      function featureNodes(lane, draw) {
+        return lane.features.map((feature) => {
+          const [own, steps] = featureEntries(lane, feature).map(draw);
+          return steps ? el("div", { class: "pair" }, own, steps) : own;
+        });
+      }
+
+      function box(title, nodes) {
+        if (nodes.length === 0) return [];
+        return [el("div", { class: "box" }, el("div", { class: "box-title" }, title), ...nodes)];
+      }
+
+      function laneBoxes(lane, draw) {
+        const every = everyOf(lane);
+        const doubles = lane.doubles.map((double) =>
+          draw({ style: "double", file: double.file, block: double }),
+        );
+        const support = lane.support.map((file) =>
+          draw({ style: file.real ? "support real" : "support", file: file.id, block: file }),
+        );
+        return [
+          ...box(`Test Doubles — every ${every} has all ${countWord(doubles.length)}`, doubles),
+          ...box(`Runs in every ${every}`, support),
+        ];
+      }
+
+      function laneNode(lane, draw) {
+        const head = [el("h3", {}, laneTitle(lane))];
+        if (lane.folder) head.push(el("div", { class: "where" }, `${lane.folder}/`));
+        if (isEmpty(lane)) {
+          const reason = lane.reason ?? "No tests of this kind yet.";
+          return el(
+            "section",
+            { class: "lane" },
+            ...head,
+            el("div", { class: "empty-lane" }, reason),
+          );
+        }
+        return el(
+          "section",
+          { class: "lane" },
+          ...head,
+          ...featureNodes(lane, draw),
+          ...laneBoxes(lane, draw),
+        );
+      }
+
+      function laneWidth(lane) {
+        if (isEmpty(lane)) return "minmax(170px, 0.7fr)";
+        return lane.features.some((one) => one.steps)
+          ? "minmax(420px, 2fr)"
+          : "minmax(280px, 1.3fr)";
+      }
+
+      function drawTests() {
+        const main = document.getElementById("tests");
+        if (tests === undefined) {
+          main.replaceChildren(el("p", { class: "calm" }, "Reading the tests…"));
+          return;
+        }
+        const scale = testScale();
+        const broken = testBrokenIds();
+        const draw = (entry) => tblockNode(entry, scale, broken);
+        main.style.gridTemplateColumns = tests.lanes.map(laneWidth).join(" ");
+        main.replaceChildren(
+          ...tests.lanes.map((lane) => laneNode(lane, draw)),
+          ...sharedRow(draw),
+        );
+        main.onclick = () => selectTest(null);
+      }
+
+      function sharedRow(draw) {
+        const nodes = sharedEntries().map(draw);
+        return box("Shared by the suites, and imported by nothing else", nodes).map((node) => {
+          node.classList.add("shared-row");
+          return node;
+        });
+      }
+
+      // ---- Tests: legend, breaks and what is selected ---------------------------------------------
+
+      function tsample(style) {
+        return el("span", { class: `tblock tsample ${style}` });
+      }
+
+      function kindsDrawn() {
+        const kinds = (tests?.lanes ?? []).flatMap((lane) => lane.doubles.flatMap((d) => d.kinds));
+        return [...new Set(kinds)];
+      }
+
+      function doubleRows() {
+        const badges = kindsDrawn().map((kind) => el("span", { class: "badge" }, kind));
+        return [
+          keyRow(tsample("double"), "Test Double, for the port it stands at"),
+          el("div", { class: "badges" }, ...badges),
+          el("div", { class: "key-note" }, "Its kinds are read from its own doc comment."),
+        ];
+      }
+
+      function testLegend() {
+        return el(
+          "section",
+          { class: "panel" },
+          el("h2", {}, "Legend"),
+          group([
+            keyRow(tsample("acceptance"), "acceptance feature"),
+            keyRow(tsample("contract"), "contract feature"),
+            keyRow(tsample("steps"), "contract steps — names the adapter it builds"),
+          ]),
+          group(doubleRows()),
+          group([
+            keyRow(tsample("support"), "runs in every test of its kind"),
+            keyRow(tsample("support real"), "real (managed) — run for real, not faked"),
+            keyRow(tsample("shared"), "shared by the suites — no one kind owns it"),
+            keyRow(tsample("empty-lane"), "kind with no tests, and why"),
+          ]),
+          group([
+            keyRow(tsample("broken"), "breaks a rule"),
+            el("div", { class: "key-note" }, "A block's height is its lines of code."),
+          ]),
+        );
+      }
+
+      function testBreakItems(breaks) {
+        if (map === undefined) return [el("p", { class: "calm" }, "Running the rules…")];
+        if (breaks.length === 0) return [el("p", { class: "calm" }, "Every rule holds.")];
+        return breaks.map((broken) => {
+          const item = el(
+            "div",
+            { class: "break" },
+            el("strong", {}, broken.rule),
+            el("div", { class: "where" }, broken.file),
+            el("div", { class: "what" }, broken.message),
+          );
+          const first = marked(broken)[0];
+          if (first) item.addEventListener("click", () => selectTest(first.block.id));
+          return item;
+        });
+      }
+
+      function testBreaksPanel() {
+        const breaks = testBreaks();
+        const alert = breaks.length > 0 ? " alert" : "";
+        return el(
+          "section",
+          { class: `panel breaks${alert}` },
+          el("h2", {}, "Breaks", el("span", { class: `count${alert}` }, String(breaks.length))),
+          ...testBreakItems(breaks),
+        );
+      }
+
+      function adapterList(steps) {
+        if (steps.adapters.length === 0) return el("p", { class: "calm" }, "It builds no adapter.");
+        const items = steps.adapters.map((one) =>
+          el(
+            "li",
+            {},
+            el("strong", {}, one.name),
+            ` for ${one.ports.join(", ") || "no port"} `,
+            el("code", {}, one.block),
+          ),
+        );
+        return el("ul", { class: "adapters" }, ...items);
+      }
+
+      function testSelectionOf(entry) {
+        const block = entry.block;
+        if (block.scenarioNames) {
+          return {
+            title: "Scenarios",
+            count: block.scenarioNames.length,
+            note: runsText(block),
+            body: scenarioList(block),
+          };
+        }
+        if (block.adapters) {
+          return {
+            title: "Checks",
+            count: block.adapters.length,
+            note: block.id,
+            body: adapterList(block),
+          };
+        }
+        return {
+          title: "File",
+          count: block.linesOfCode,
+          note: entry.file,
+          body: el("p", { class: "calm" }, `${block.linesOfCode} lines of code`),
+        };
+      }
+
+      function testSelectionPanel() {
+        const entry = testEntryAt(selectedTest ?? "");
+        if (entry === undefined) return [];
+        const head = testSelectionOf(entry);
+        return [
+          el(
+            "section",
+            { class: "panel selection" },
+            el("h2", {}, head.title, el("span", { class: "count" }, String(head.count))),
+            el("p", { class: "subject" }, entry.block.name),
+            el("p", { class: "subject-note" }, head.note),
+            head.body,
+          ),
+        ];
+      }
+
+      function drawTestsSide() {
+        document
+          .getElementById("tests-side")
+          .replaceChildren(...testSelectionPanel(), testLegend(), testBreaksPanel());
+      }
+
+      function selectTest(id) {
+        selectedTest = id === null || selectedTest === id ? null : id;
+        drawTestsSide();
+        drawTests();
+      }
+
+      async function loadTests() {
+        tests = undefined;
+        selectedTest = null;
+        drawTests();
+        try {
+          tests = await read("/tests.json");
+        } catch (error) {
+          document
+            .getElementById("tests")
+            .replaceChildren(el("p", { class: "calm" }, `Failed: ${error.message}`));
+          return;
+        }
+        drawTestsSide();
+        drawTests();
+      }
+
+      // Switching only hides one view and shows the other; neither is redrawn by it, so each is
+      // exactly as it was left, with whatever was selected.
+      function showView(name) {
+        document.getElementById("map-view").hidden = name !== "map";
+        document.getElementById("tests-view").hidden = name !== "tests";
+        document.querySelectorAll(".views button").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.view === name));
+        });
+      }
+
+      // ---- Loading -------------------------------------------------------------------------------
+
+      async function read(path) {
+        const response = await fetch(path, { cache: "no-store" });
+        if (!response.ok) throw new Error(await response.text());
+        return await response.json();
+      }
+
+      async function load() {
+        const status = document.getElementById("status");
+        const started = performance.now();
+        void loadTests();
+        selectedBlock = null;
+        status.textContent = "Reading the working tree…";
+        try {
+          map = await read("/map.json");
+        } catch (error) {
+          status.textContent = `Failed: ${error.message}`;
+          return;
+        }
+        const seconds = ((performance.now() - started) / 1000).toFixed(1);
+        status.textContent = `Read at ${new Date().toLocaleTimeString()} in ${seconds}s`;
+        drawSide();
+        drawMap();
+        // The Tests view's breaks ride on the map's, so they are drawn once it arrives.
+        if (tests) {
+          drawTestsSide();
+          drawTests();
+        }
+      }
+
+      document.getElementById("reload").addEventListener("click", load);
+      document.querySelectorAll(".views button").forEach((button) => {
+        button.addEventListener("click", () => showView(button.dataset.view));
+      });
+      window.addEventListener("resize", () => {
+        if (map) drawMap();
+        if (tests) drawTests();
+      });
+      load();
+    </script>
+  </body>
+</html>
