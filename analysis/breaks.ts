@@ -1,12 +1,11 @@
 import type { AnalysisContext } from "./context.js";
 import { contractFeaturesOf } from "./contracts.js";
-import { MANAGED_RULE } from "./managed.js";
+import { ADAPTER_RULE, RULES } from "./rules.js";
 import { type Envelope, runRules, type RulesRun } from "./rules-run.js";
-import { RULES } from "./rules-file.js";
 import { testKinds } from "./test-kinds.js";
 
 /**
- * A failing scenario of the target's rules (`rules-file.ts`) (#74, decisions 7 and 12): the rule it breaks,
+ * A failing scenario of the rules (`rules.ts`) (#74, decisions 7 and 12): the rule it breaks,
  * the file and message it names, and the blocks the page marks red for it.
  */
 export interface Break {
@@ -17,10 +16,10 @@ export interface Break {
   readonly blocks: readonly string[];
   /**
    * The view it shows on (#165, decision 11). A break is about the tests when the file it names is
-   * in a folder tests live in (ADR-0031, `test-kinds.ts`) or is one the suites share
+   * in a folder tests live in (`test-kinds.ts`) or is one the suites share
    * (`shared-tests.ts`), when it names an adapter a contract
-   * steps file builds, or when it breaks the rule that pairs adapters with contract features, whose
-   * breaks name the adapters that have none. Everything else is about the hexagon, and on the Map.
+   * steps file builds, or when it breaks the rule that pairs each adapter with its kind of test, whose
+   * breaks name the adapters it finds wanting. Everything else is about the hexagon, and on the Map.
    */
   readonly view: "map" | "tests";
 }
@@ -32,7 +31,7 @@ const NOT_BROKEN: readonly string[] = ["PASSED", "SKIPPED", "UNDEFINED", "PENDIN
 /**
  * Runs the rules and turns what failed into breaks.
  *
- * A step in `tools/insight/steps/` fails with one offence per line, each opening with the file it
+ * A step in `steps/` fails with one offence per line, each opening with the file it
  * names (`refuseAny` in `steps/world.ts`), so one failing scenario becomes a break **per offence**:
  * a scenario that finds three unimplemented ports shows three, each with its own file and its own
  * red mark, rather than one break naming a single file for all three. The blocks a break marks are
@@ -42,7 +41,7 @@ const NOT_BROKEN: readonly string[] = ["PASSED", "SKIPPED", "UNDEFINED", "PENDIN
  * A failure not in that shape — a step that threw — is still a break, against the rules file itself.
  * So is a run that never finished: an empty list must mean the rules held, not that they did not
  * run. A step that is **undefined** or pending is not a break: it is a rule whose steps an agent has
- * not written yet (#74, decision 15), not code that broke one, and `pnpm insight:rules` names it.
+ * not written yet (#74, decision 15), not code that broke one, and `hexagon-insight rules` names it.
  */
 export async function breaksOf(context: AnalysisContext): Promise<readonly Break[]> {
   const found = breaksIn(context, await runRules(context.root));
@@ -61,7 +60,7 @@ function breaksIn(context: AnalysisContext, run: RulesRun): readonly Unplaced[] 
 function viewOf(context: AnalysisContext, broken: Unplaced): Break["view"] {
   const checked = checkedAdapters(context);
   const aboutTests =
-    broken.rule === MANAGED_RULE ||
+    broken.rule === ADAPTER_RULE ||
     onTests(context).some((drawn) => broken.file.startsWith(drawn)) ||
     broken.blocks.some((id) => checked.has(id));
 
@@ -71,7 +70,7 @@ function viewOf(context: AnalysisContext, broken: Unplaced): Break["view"] {
 /** What Tests draws: each suite's folder, and each file the suites share (`shared-tests.ts`). */
 function onTests(context: AnalysisContext): readonly string[] {
   return context.memo("on-tests", () => [
-    ...testKinds(context.root).flatMap((kind) => (kind.folder === null ? [] : `${kind.folder}/`)),
+    ...testKinds(context.root).map((kind) => `${kind.folder}/`),
     ...context.sharedTests.map(({ path }) => path),
   ]);
 }

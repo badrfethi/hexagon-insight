@@ -57,7 +57,7 @@ export function createContext(root: string): AnalysisContext {
   const relative = (fileName: string): string => posix.relative(normalRoot, normal(fileName));
   const blockOf = (fileName: string): Block | undefined =>
     blocks.find((block) => normal(fileName).startsWith(`${block.directory}/`));
-  const tests = testKinds(normalRoot).flatMap(({ folder }) => folder ?? []);
+  const tests = testKinds(normalRoot).map(({ folder }) => folder);
   const sharedTests = sharedTestFiles(normalRoot, program, sourceFiles, tests);
   const outside = outsideBlocks(normalRoot, blocks, [
     ...tests.map((folder) => `${folder}/`),

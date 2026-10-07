@@ -5,8 +5,8 @@ import { type AnalysisContext, createContext } from "../analysis/context.js";
 import type { ScenarioDoor } from "../analysis/feature-runs.js";
 
 /**
- * What a `Given` of the target's rules (`analysis/rules-file.ts`) hands to its `Then`: the groups or adapters a rule
- * is about, and which adapters the operator calls managed.
+ * What a `Given` of the rules (`analysis/rules.ts`) hands to its `Then`: the groups or adapters a rule
+ * is about, and which way those adapters face.
  *
  * The rules read the same analysis the map draws (#86: "no second parser"). Building it compiles the
  * whole repository, so it is built once for the run and shared by every scenario, and the step
@@ -14,8 +14,8 @@ import type { ScenarioDoor } from "../analysis/feature-runs.js";
  */
 export class RulesWorld extends World {
   groups: readonly Block[] = [];
-  /** The folder names under `src/adapters` the Background lists as managed (ADR-0023). */
-  managed: ReadonlySet<string> = new Set();
+  /** `incoming` or `outgoing`, when `groups` is the adapters of one lane (`adapters.steps.ts`). */
+  direction = "";
   /** The scenarios a rule is about, each with the door it was measured to come in (`feature-runs.ts`). */
   scenarios: readonly ScenarioDoor[] = [];
 

@@ -48,7 +48,7 @@ export function arrowsOf(context: AnalysisContext): Arrow[] {
   return unique([...references, ...dependencies, ...implementations(context), ...checks(context)]);
 }
 
-/** Each block to the contract features that check it — the unmanaged adapters, in practice. */
+/** Each block to the contract features that check it — the outgoing adapters, in practice. */
 function checks(context: AnalysisContext): Arrow[] {
   return context.blocks.flatMap((block) =>
     contractFeaturesOf(context, block).map((feature) => ({

@@ -8,30 +8,40 @@ import { declarationOf, descendants, isClass } from "./symbols.js";
 
 export type GherkinDocument = ReturnType<Parser<unknown>["parse"]>;
 
-/** A contract feature, parsed, under its path relative to the root. */
+/** A feature that runs an adapter, parsed, under its path relative to the root. */
 export interface ContractFeature {
   readonly path: string;
   readonly document: GherkinDocument;
 }
 
-const STEPS_FILE = /^contracts\/support\/(?<name>[^/]+)\.steps\.ts$/;
+/**
+ * The contract features that belong to a block: those under `contracts/` (`featuresRunning`).
+ */
+export function contractFeaturesOf(context: AnalysisContext, block: Block): ContractFeature[] {
+  return featuresRunning(context, block, "contracts");
+}
 
 /**
- * The contract features that belong to a block.
+ * The features of the suite in `folder` that belong to a block — `contracts` for contract tests,
+ * `entry-points` for entry point tests.
  *
- * A contract feature belongs to the adapter its steps file **constructs** — `new` on a class the
- * block declares — not to every adapter the steps file imports (#74, decision 18). So
+ * A feature belongs to the adapter its steps file **constructs** — `new` on a class the block
+ * declares — not to every adapter the steps file imports (#74, decision 18). So
  * `contracts/anthropic.feature` belongs to both Claude adapters, and not to `crayo-clip-provider`,
  * whose constant it only imports. A steps file is paired with its feature by name, as cucumber's
  * suite is laid out: `contracts/support/crayo.steps.ts` with `contracts/crayo.feature`.
  */
-export function contractFeaturesOf(context: AnalysisContext, block: Block): ContractFeature[] {
-  return context.memo("contracts", () => contractFeatures(context)).get(block.id) ?? [];
+export function featuresRunning(
+  context: AnalysisContext,
+  block: Block,
+  folder: string,
+): ContractFeature[] {
+  return context.memo(`features:${folder}`, () => featuresIn(context, folder)).get(block.id) ?? [];
 }
 
-function contractFeatures(context: AnalysisContext): Map<string, ContractFeature[]> {
+function featuresIn(context: AnalysisContext, folder: string): Map<string, ContractFeature[]> {
   const owned = new Map<string, ContractFeature[]>();
-  const pairs = context.sourceFiles.flatMap((steps) => ownersOf(context, steps));
+  const pairs = context.sourceFiles.flatMap((steps) => ownersOf(context, steps, folder));
 
   pairs.forEach(({ id, feature }) => owned.set(id, [...(owned.get(id) ?? []), feature]));
 
@@ -41,18 +51,25 @@ function contractFeatures(context: AnalysisContext): Map<string, ContractFeature
 function ownersOf(
   context: AnalysisContext,
   steps: ts.SourceFile,
+  folder: string,
 ): { readonly id: string; readonly feature: ContractFeature }[] {
-  const feature = featureFor(context, steps);
+  const feature = featureFor(context, steps, folder);
 
   return feature === undefined
     ? []
     : [...constructedBlocks(context, steps)].map((id) => ({ id, feature }));
 }
 
-function featureFor(context: AnalysisContext, steps: ts.SourceFile): ContractFeature | undefined {
-  const name = STEPS_FILE.exec(context.relative(steps.fileName))?.groups?.name;
+function featureFor(
+  context: AnalysisContext,
+  steps: ts.SourceFile,
+  folder: string,
+): ContractFeature | undefined {
+  const path = context.relative(steps.fileName);
+  const name = posix.basename(path, ".steps.ts");
+  const paired = path === `${folder}/support/${name}.steps.ts`;
 
-  return name === undefined ? undefined : featureNamed(context, `contracts/${name}.feature`);
+  return paired ? featureNamed(context, `${folder}/${name}.feature`) : undefined;
 }
 
 function featureNamed(context: AnalysisContext, path: string): ContractFeature | undefined {
@@ -80,8 +97,8 @@ export interface ConstructedAdapter {
 /**
  * Every class a steps file constructs that a block declares, once each, in the order first built.
  *
- * It is what ties a contract feature to its adapter, so it is shared by the rule that holds an
- * unmanaged adapter to a contract feature and by the Tests view, which names the adapter on the
+ * It is what ties a contract or entry point feature to its adapter, so it is shared by the rule that
+ * pairs each adapter with its kind of test and by the Tests view, which names the adapter on the
  * steps file rather than drawing it again: the adapter lives on the Map.
  */
 export function constructedAdapters(
