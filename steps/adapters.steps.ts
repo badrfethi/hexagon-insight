@@ -24,9 +24,12 @@ const LANES: Readonly<Record<string, Lane>> = {
 Given(
   "the {word} adapters under {string}",
   function (this: RulesWorld, direction: string, path: string) {
+    // An unknown word selects no lane, so every Then after it would pass over nothing.
+    const lane = Object.hasOwn(LANES, direction) ? LANES[direction] : undefined;
+    refuseAny(lane === undefined ? [`${path}: "${direction}" is not incoming or outgoing`] : []);
     this.direction = direction;
     this.groups = adaptersUnder(this.context, path).filter(
-      (adapter) => laneOf(this.context, adapter) === LANES[direction],
+      (adapter) => laneOf(this.context, adapter) === lane,
     );
   },
 );

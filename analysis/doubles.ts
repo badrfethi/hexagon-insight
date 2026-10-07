@@ -9,8 +9,10 @@ import { firstSentence } from "./test-kinds.js";
  * A Test Double at an outgoing port, drawn on the Tests view as a block of its own (#166).
  *
  * What a Test Double is belongs to this tool, and is stated in `README.md` (_Test Doubles_): a
- * class in a suite's support code that implements an outgoing port. That is what it stands in for,
- * so it is found by what it does rather than by the file it is in. Its kind is one or more of
+ * class in a suite's support code that implements a port, incoming or outgoing. That is what it
+ * stands in for, so it is found by what it does rather than by the file it is in. Only the doubles
+ * at outgoing ports are found so far, the acceptance suite's; an entry point test's double at an
+ * incoming port is not drawn yet (#11). Its kind is one or more of
  * Meszaros's Dummy, Stub, Spy, Mock and Fake, named by the double itself in the first sentence of
  * its doc comment — "The Clip provider: a Fake, and a Spy." — because its name cannot say it:
  * `FakeClipProvider` is a Spy too. So there is no list here of which double is which.

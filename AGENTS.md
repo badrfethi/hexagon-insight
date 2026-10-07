@@ -30,10 +30,11 @@ So the concepts the analysis rests on are stated here, not borrowed from a targe
 - **The four kinds of test and their folders** (`entry-points/`, `features/`, `core-tests/`,
   `contracts/`) are stated in `analysis/test-kinds.ts` and `README.md`. Nothing reads a target's
   ADRs.
-- **A Test Double** is a class in a suite's support code that implements an outgoing port; its
-  kinds are Meszaros's (Dummy, Stub, Spy, Mock, Fake), named in the first sentence of its own doc
-  comment; doubles are test code, outside a target's coverage and mutation gates. `README.md`
-  (_Test Doubles_) is the statement, and `analysis/doubles.ts` cites it.
+- **A Test Double** is a class in a suite's support code that implements a port, incoming or
+  outgoing; its kinds are Meszaros's (Dummy, Stub, Spy, Mock, Fake), named in the first sentence of
+  its own doc comment. Which code a target's coverage and mutation gates measure is the target's
+  own policy, not the tool's. `README.md` (_Test Doubles_) is the statement, and
+  `analysis/doubles.ts` cites it; the finder sees only doubles at outgoing ports so far.
 
 A JSDoc comment that explains one of these cites `README.md` or `rules.feature`, never a target's
 ADR or glossary. If a target's docs disagree with this repo, this repo is right for the tool, and the

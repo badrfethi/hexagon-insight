@@ -85,16 +85,17 @@ A feature is tied to the adapter it tests by its steps file, paired with it by n
 ## Test Doubles
 
 A **Test Double** is a class in a suite's support code (`features/support/`, `contracts/support/`,
-`entry-points/support/`, `core-tests/support/`) that implements an outgoing port. It stands in for
-whatever is on the other side of that port, so the tool finds it by the port it implements, not by
-its name or its file.
+`entry-points/support/`, `core-tests/support/`) that implements a port, incoming or outgoing. It
+stands in for whatever is on the other side of that port: an acceptance test's doubles stand at the
+outgoing ports, an entry point test's double at the incoming port behind the adapter. So the tool
+finds a double by the port it implements, not by its name or its file. For now it finds only the
+doubles at outgoing ports.
 
 Its **kind** is one or more of Meszaros's Dummy, Stub, Spy, Mock and Fake, and the double names it
 itself in the first sentence of its doc comment: "The Clip provider: a Fake, and a Spy." Its class
 name cannot carry it, because one double is often two kinds.
 
-Test Doubles are test code. They sit outside a target's coverage and mutation gates, with the rest
-of its suites. A class a suite's world builds that implements no port is not a double: it is a
+A class a suite's world builds that implements no port is not a double: it is a
 dependency run for real, and the Tests view draws it as real.
 
 ## What the target provides
