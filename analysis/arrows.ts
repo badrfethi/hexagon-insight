@@ -1,17 +1,16 @@
-import ts from "typescript";
 import type { Block } from "./blocks.js";
-import type { AnalysisContext } from "./context.js";
+import { type AnalysisContext, inFolder } from "./context.js";
 import { contractFeaturesOf } from "./contracts.js";
-import { blockDeclaring, blockExporting, declarationOf, descendants, isClass } from "./symbols.js";
+import type { Declaration } from "./model.js";
 
 /**
  * An arrow on the map (#74, decision 3).
  *
  * - `depends-on` — a constructor in `from` takes a parameter typed by something `to` exports: a
  *   group's interface or port, or a type an adapter exports, such as `RunProcess`.
- * - `implements` — a class in `from`, constructed in `src/index.ts`, implements a port `to` owns.
- *   Constructed anywhere in that file counts, so an adapter handed to another adapter there still
- *   has its arrow.
+ * - `implements` — a class in `from`, constructed in a composition root (`Code.compositionRoots`,
+ *   `src/index.ts` in a TypeScript target), implements a port `to` owns. Constructed anywhere in
+ *   that file counts, so an adapter handed to another adapter there still has its arrow.
  * - `references` — an adapter imports an interface from `to`'s `incoming_ports/`. An incoming
  *   adapter drives the hexagon through such a port rather than implementing it, and may reference
  *   several, in staff or in suppliers. It replaces a `depends-on` arrow between the same two blocks.
@@ -27,8 +26,6 @@ export interface Arrow {
   readonly to: string;
   readonly kind: "depends-on" | "implements" | "references" | "checked-by";
 }
-
-const COMPOSITION_ROOT = "src/index.ts";
 
 export function arrowsOf(context: AnalysisContext): Arrow[] {
   const references = context.blocks
@@ -66,71 +63,55 @@ function checks(context: AnalysisContext): Arrow[] {
 export function incomingPortGroupsOf(context: AnalysisContext, block: Block): Block[] {
   const targets = context
     .filesOf(block)
-    .flatMap((file) => descendants(file).filter(ts.isImportSpecifier))
-    .map((specifier) => declarationOf(context, specifier.name))
-    .filter((declaration) => isIncomingPort(declaration))
-    .flatMap((declaration) => context.blockOf(declaration.getSourceFile().fileName) ?? [])
+    .flatMap((file) => file.imports)
+    .map((id) => context.declaration(id))
+    .filter(isIncomingPort)
+    .flatMap((declaration) => context.blockOf(declaration.file) ?? [])
     .filter((target) => target !== block);
 
   return [...new Set(targets)];
 }
 
-function isIncomingPort(declaration: ts.Declaration | undefined): declaration is ts.Declaration {
-  return (
-    declaration !== undefined &&
-    ts.isInterfaceDeclaration(declaration) &&
-    declaration.getSourceFile().fileName.includes("/incoming_ports/")
-  );
+function isIncomingPort(declaration: Declaration): boolean {
+  return declaration.kind === "interface" && inFolder(declaration.file, "incoming_ports");
 }
 
 function dependenciesOf(context: AnalysisContext): Arrow[] {
   return context.blocks.flatMap((block) =>
     context
       .filesOf(block)
-      .flatMap((file) => descendants(file).filter(ts.isConstructorDeclaration))
-      .flatMap((constructor) => constructor.parameters.flatMap((parameter) => typeNames(parameter)))
-      .map((name) => blockExporting(context, name))
+      .flatMap((file) => file.constructorParameterTypes)
+      .map((id) => blockExporting(context, id))
       .filter((target) => isOther(target, block))
       .map((target) => ({ from: block.id, to: target.id, kind: "depends-on" as const })),
   );
 }
 
-/** Every named type in a parameter's annotation, including inside unions, arrays and generics. */
-function typeNames(parameter: ts.ParameterDeclaration): ts.EntityName[] {
-  return parameter.type === undefined
-    ? []
-    : descendants(parameter.type)
-        .filter(ts.isTypeReferenceNode)
-        .map((reference) => reference.typeName);
+/** The block that exports a declaration: declared in the block, with `export` on it. */
+function blockExporting(context: AnalysisContext, id: string): Block | undefined {
+  const declaration = context.declaration(id);
+
+  return declaration.exported ? context.blockOf(declaration.file) : undefined;
 }
 
 function implementations(context: AnalysisContext): Arrow[] {
-  const root = context.fileAt(COMPOSITION_ROOT);
-
-  return root === undefined
-    ? []
-    : descendants(root)
-        .filter(ts.isNewExpression)
-        .map((construction) => declarationOf(context, construction.expression))
-        .filter(isClass)
-        .flatMap((declaration) => portsOf(context, declaration));
+  return context.model.compositionRoots
+    .flatMap((path) => context.fileAt(path) ?? [])
+    .flatMap((root) => root.constructs)
+    .map((id) => context.declaration(id))
+    .flatMap((declaration) => portsOf(context, declaration));
 }
 
-function portsOf(context: AnalysisContext, declaration: ts.ClassDeclaration): Arrow[] {
-  const block = context.blockOf(declaration.getSourceFile().fileName);
+function portsOf(context: AnalysisContext, declaration: Declaration): Arrow[] {
+  const block = context.blockOf(declaration.file);
 
   return block === undefined ? [] : implemented(context, declaration, block);
 }
 
-function implemented(
-  context: AnalysisContext,
-  declaration: ts.ClassDeclaration,
-  block: Block,
-): Arrow[] {
-  return (declaration.heritageClauses ?? [])
-    .filter((clause) => clause.token === ts.SyntaxKind.ImplementsKeyword)
-    .flatMap((clause) => clause.types)
-    .map((type) => blockDeclaring(context, type.expression))
+function implemented(context: AnalysisContext, declaration: Declaration, block: Block): Arrow[] {
+  return declaration.implements
+    .flatMap(({ target }) => (target === undefined ? [] : [context.declaration(target)]))
+    .map((port) => context.blockOf(port.file))
     .filter((target) => isOther(target, block))
     .map((target) => ({ from: block.id, to: target.id, kind: "implements" as const }));
 }

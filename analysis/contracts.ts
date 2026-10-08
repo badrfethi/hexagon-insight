@@ -1,10 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
 import { posix } from "node:path";
 import { AstBuilder, GherkinClassicTokenMatcher, Parser } from "@cucumber/gherkin";
-import ts from "typescript";
 import type { Block } from "./blocks.js";
 import type { AnalysisContext } from "./context.js";
-import { declarationOf, descendants, isClass } from "./symbols.js";
+import type { CodeFile, Declaration } from "./model.js";
 
 export type GherkinDocument = ReturnType<Parser<unknown>["parse"]>;
 
@@ -28,8 +26,9 @@ export function contractFeaturesOf(context: AnalysisContext, block: Block): Cont
  * A feature belongs to the adapter its steps file **constructs** — `new` on a class the block
  * declares — not to every adapter the steps file imports (#74, decision 18). So
  * `contracts/anthropic.feature` belongs to both Claude adapters, and not to `crayo-clip-provider`,
- * whose constant it only imports. A steps file is paired with its feature by name, as cucumber's
- * suite is laid out: `contracts/support/crayo.steps.ts` with `contracts/crayo.feature`.
+ * whose constant it only imports. A steps file is paired with its feature by the reader
+ * (`Code.steps`): in a TypeScript target, `contracts/support/crayo.steps.ts` with
+ * `contracts/crayo.feature`, as cucumber's suite is laid out.
  */
 export function featuresRunning(
   context: AnalysisContext,
@@ -40,8 +39,11 @@ export function featuresRunning(
 }
 
 function featuresIn(context: AnalysisContext, folder: string): Map<string, ContractFeature[]> {
+  const featureOf = new Map(context.model.steps.map((pair) => [pair.steps, pair.feature] as const));
   const owned = new Map<string, ContractFeature[]>();
-  const pairs = context.sourceFiles.flatMap((steps) => ownersOf(context, steps, folder));
+  const pairs = context.compiled.flatMap((steps) =>
+    ownersOf(context, steps, featureOf.get(steps.path), folder),
+  );
 
   pairs.forEach(({ id, feature }) => owned.set(id, [...(owned.get(id) ?? []), feature]));
 
@@ -50,37 +52,27 @@ function featuresIn(context: AnalysisContext, folder: string): Map<string, Contr
 
 function ownersOf(
   context: AnalysisContext,
-  steps: ts.SourceFile,
+  steps: CodeFile,
+  paired: string | undefined,
   folder: string,
 ): { readonly id: string; readonly feature: ContractFeature }[] {
-  const feature = featureFor(context, steps, folder);
+  const feature =
+    paired !== undefined && posix.dirname(paired) === folder
+      ? featureNamed(context, paired)
+      : undefined;
 
   return feature === undefined
     ? []
     : [...constructedBlocks(context, steps)].map((id) => ({ id, feature }));
 }
 
-function featureFor(
-  context: AnalysisContext,
-  steps: ts.SourceFile,
-  folder: string,
-): ContractFeature | undefined {
-  const path = context.relative(steps.fileName);
-  const name = posix.basename(path, ".steps.ts");
-  const paired = path === `${folder}/support/${name}.steps.ts`;
-
-  return paired ? featureNamed(context, `${folder}/${name}.feature`) : undefined;
-}
-
 function featureNamed(context: AnalysisContext, path: string): ContractFeature | undefined {
-  const file = posix.join(context.root, path);
+  const feature = context.featureAt(path);
 
-  return existsSync(file)
-    ? { path, document: parseFeature(readFileSync(file, "utf8")) }
-    : undefined;
+  return feature === undefined ? undefined : { path, document: parseFeature(feature.text) };
 }
 
-function constructedBlocks(context: AnalysisContext, steps: ts.SourceFile): Set<string> {
+function constructedBlocks(context: AnalysisContext, steps: CodeFile): Set<string> {
   return new Set(constructedAdapters(context, steps).map((adapter) => adapter.block));
 }
 
@@ -103,32 +95,25 @@ export interface ConstructedAdapter {
  */
 export function constructedAdapters(
   context: AnalysisContext,
-  steps: ts.SourceFile,
+  steps: CodeFile,
 ): readonly ConstructedAdapter[] {
-  const classes = descendants(steps)
-    .filter(ts.isNewExpression)
-    .map((construction) => declarationOf(context, construction.expression))
-    .filter(isClass);
-
-  return [...new Set(classes)].flatMap((declaration) => adapterOf(context, declaration));
+  return steps.constructs
+    .map((id) => context.declaration(id))
+    .flatMap((declaration) => adapterOf(context, declaration));
 }
 
-function adapterOf(
-  context: AnalysisContext,
-  declaration: ts.ClassDeclaration,
-): ConstructedAdapter[] {
-  const block = context.blockOf(declaration.getSourceFile().fileName);
+function adapterOf(context: AnalysisContext, declaration: Declaration): ConstructedAdapter[] {
+  const block = context.blockOf(declaration.file);
 
   return block === undefined
     ? []
-    : [{ name: declaration.name?.text ?? "", block: block.id, ports: implementedBy(declaration) }];
-}
-
-/** The names a class `implements`, as written. */
-export function implementedBy(declaration: ts.ClassDeclaration): readonly string[] {
-  return (declaration.heritageClauses ?? [])
-    .filter((clause) => clause.token === ts.SyntaxKind.ImplementsKeyword)
-    .flatMap((clause) => clause.types.map((type) => type.expression.getText()));
+    : [
+        {
+          name: declaration.name,
+          block: block.id,
+          ports: declaration.implements.map(({ written }) => written),
+        },
+      ];
 }
 
 export function parseFeature(text: string): GherkinDocument {

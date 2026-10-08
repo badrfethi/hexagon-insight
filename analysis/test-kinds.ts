@@ -1,6 +1,3 @@
-import { existsSync } from "node:fs";
-import { posix } from "node:path";
-
 /**
  * One kind of test, the folder at the target's root its tests live in, and why it has none.
  *
@@ -32,18 +29,19 @@ export interface TestKind {
  * The kinds in the order the Tests view reads, outside in: what a Client meets, the hexagon through
  * its incoming port, its core, and the suppliers at the far side (#165, decision 4).
  */
-const KINDS: readonly Pick<TestKind, "kind" | "folder">[] = [
+export const KINDS: readonly Pick<TestKind, "kind" | "folder">[] = [
   { kind: "Entry point test", folder: "entry-points" },
   { kind: "Acceptance test", folder: "features" },
   { kind: "Core test", folder: "core-tests" },
   { kind: "Contract test", folder: "contracts" },
 ];
 
-export function testKinds(root: string): readonly TestKind[] {
+/** `rootEntries` is the names at the target's root (`Model.rootEntries`). */
+export function testKinds(rootEntries: readonly string[]): readonly TestKind[] {
   return KINDS.map(({ kind, folder }) => ({
     kind,
     folder,
-    reason: existsSync(posix.join(root, folder)) ? null : `No \`${folder}/\` folder.`,
+    reason: rootEntries.includes(folder) ? null : `No \`${folder}/\` folder.`,
   }));
 }
 

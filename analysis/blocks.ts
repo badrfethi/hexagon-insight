@@ -1,5 +1,5 @@
-import { readdirSync } from "node:fs";
 import { posix } from "node:path";
+import type { GroupFolder } from "./model.js";
 
 /**
  * Where a block's code is. The map splits `adapters` into two columns by direction (`map.ts`), so
@@ -19,7 +19,7 @@ export interface Block {
   readonly id: string;
   readonly name: string;
   readonly column: Column;
-  /** Absolute, with forward slashes, and no trailing slash. */
+  /** Relative to the root, such as `src/adapters/terminal`, and with no trailing slash. */
   readonly directory: string;
 }
 
@@ -34,21 +34,23 @@ export const COLUMNS: readonly ColumnPlace[] = [
   { column: "adapters", path: "src/adapters" },
 ];
 
-/** Reads the blocks from the directories, so a new group or adapter appears without a change here. */
-export function discoverBlocks(root: string): readonly Block[] {
-  return COLUMNS.flatMap(({ column, path }) =>
-    directoriesIn(posix.join(root, path)).map((name) => ({
-      id: posix.join(path.replace(/^src\//, ""), name),
-      name,
-      column,
-      directory: posix.join(root, path, name),
-    })),
-  );
-}
+/**
+ * The blocks, one per folder in a column's folder (`readers/layout.ts`), so a new group or adapter
+ * appears without a change here.
+ */
+export function blocksOf(groups: readonly GroupFolder[]): readonly Block[] {
+  return groups.flatMap(({ path }) => {
+    const place = COLUMNS.find((column) => column.path === posix.dirname(path));
 
-function directoriesIn(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
+    return place === undefined
+      ? []
+      : [
+          {
+            id: path.replace(/^src\//, ""),
+            name: posix.basename(path),
+            column: place.column,
+            directory: path,
+          },
+        ];
+  });
 }

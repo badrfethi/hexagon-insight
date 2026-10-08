@@ -1,25 +1,20 @@
-import { posix } from "node:path";
-import ts from "typescript";
-import { type Block, discoverBlocks } from "./blocks.js";
+import { type Block, blocksOf } from "./blocks.js";
+import type { CodeFile, Declaration, FeatureText, Model } from "./model.js";
 import { type OutsideBlock, outsideBlocks } from "./outside.js";
 import { type SharedTestFile, sharedTestFiles } from "./shared-tests.js";
 import { testKinds } from "./test-kinds.js";
 
 /**
  * Everything one load of the page has read, shared by every part of the analysis so that nothing
- * parses the working tree twice.
+ * reads the target twice.
  *
- * It is built fresh for each load and thrown away after it: insight shows the working tree now, and
- * stores nothing (#74, decision 4). `memo` is the place for anything expensive a second caller
- * would otherwise compute again — the parsed contract features, a coverage run — and it lives only
- * as long as the load does.
+ * It is built from one model (`model.ts`), fresh for each load, and thrown away after it: insight
+ * shows the working tree now, and stores nothing (#74, decision 4). `memo` is the place for anything
+ * expensive a second caller would otherwise compute again — the parsed contract features — and it
+ * lives only as long as the load does.
  */
 export interface AnalysisContext {
-  /** The repository root, absolute, with forward slashes. */
-  readonly root: string;
-  /** One program over `tsconfig.check.json`: `src`, `features`, `contracts` and `tools`. */
-  readonly program: ts.Program;
-  readonly checker: ts.TypeChecker;
+  readonly model: Model;
   readonly blocks: readonly Block[];
   /**
    * The catch-all blocks under the columns: every code file that belongs to no group and is not a
@@ -29,57 +24,75 @@ export interface AnalysisContext {
   readonly outside: readonly OutsideBlock[];
   /** What the suites share and nothing else imports, drawn on Tests rather than the strip. */
   readonly sharedTests: readonly SharedTestFile[];
-  /** The repository's own TypeScript files — no declaration files, nothing from `node_modules`. */
-  readonly sourceFiles: readonly ts.SourceFile[];
+  /** The files the reader compiled, in path order: those whose declarations and imports are read. */
+  readonly compiled: readonly CodeFile[];
+  /** Every file the reader lists as code, by path, in path order. */
+  readonly listed: readonly string[];
+  /** A file the model holds, by its path; one it does not hold is a reader's mistake, and throws. */
+  file(path: string): CodeFile;
+  /** A file the reader compiled, by its path, if it did. */
+  fileAt(path: string): CodeFile | undefined;
+  /** A declaration by its id; one the model names but does not declare throws. */
+  declaration(id: string): Declaration;
+  /** A feature's text by its path, if the model holds it (`Layout.features`). */
+  featureAt(path: string): FeatureText | undefined;
   /** The block a file belongs to, or `undefined` for code outside every group. */
-  blockOf(fileName: string): Block | undefined;
-  /** The same, falling back to the catch-all block that holds the file, so nothing resolves to none. */
-  anyBlockOf(fileName: string): Block | undefined;
-  /** The block's own files, in path order. */
-  filesOf(block: Block): readonly ts.SourceFile[];
-  /** A file by its path relative to the root, if the program holds it. */
-  fileAt(relativePath: string): ts.SourceFile | undefined;
-  /** A file's path relative to the root, for display. */
-  relative(fileName: string): string;
+  blockOf(path: string): Block | undefined;
+  /** The block's own compiled files, in path order. */
+  filesOf(block: Block): readonly CodeFile[];
+  /** The names directly in the block's folder, files and folders. */
+  entriesOf(block: Block): readonly string[];
   /** Computes a value once per load under `key`, and hands back the same value after that. */
   memo<T>(key: string, compute: () => T): T;
 }
 
-export function createContext(root: string): AnalysisContext {
-  const normalRoot = normal(root);
-  const program = programFor(normalRoot);
-  const blocks = discoverBlocks(normalRoot);
-  const sourceFiles = program
-    .getSourceFiles()
-    .filter((file) => !file.isDeclarationFile && !file.fileName.includes("/node_modules/"))
-    .sort((one, other) => one.fileName.localeCompare(other.fileName));
+export function contextOf(model: Model): AnalysisContext {
+  const blocks = blocksOf(model.groups);
+  const files = new Map(model.files.map((file) => [file.path, file] as const));
+  const declarations = new Map(model.declarations.map((found) => [found.id, found] as const));
+  const features = new Map(model.features.map((feature) => [feature.path, feature] as const));
+  const entries = new Map(model.groups.map((group) => [group.path, group.entries] as const));
+  const compiled = model.files
+    .filter((file) => file.compiled)
+    .sort((one, other) => one.path.localeCompare(other.path));
+  const listed = model.files
+    .filter((file) => file.listed)
+    .map((file) => file.path)
+    .sort();
   const cache = new Map<string, unknown>();
-  const relative = (fileName: string): string => posix.relative(normalRoot, normal(fileName));
-  const blockOf = (fileName: string): Block | undefined =>
-    blocks.find((block) => normal(fileName).startsWith(`${block.directory}/`));
-  const tests = testKinds(normalRoot).map(({ folder }) => folder);
-  const sharedTests = sharedTestFiles(normalRoot, program, sourceFiles, tests);
-  const outside = outsideBlocks(normalRoot, blocks, [
+  const blockOf = (path: string): Block | undefined =>
+    blocks.find((block) => path.startsWith(`${block.directory}/`));
+  const tests = testKinds(model.rootEntries).map(({ folder }) => folder);
+  const sharedTests = sharedTestFiles(compiled, tests);
+  const outside = outsideBlocks(listed, blocks, [
     ...tests.map((folder) => `${folder}/`),
     ...sharedTests.map(({ path }) => path),
   ]);
-  const catchAll = new Map(outside.flatMap((block) => block.files.map((file) => [file, block])));
 
   return {
-    root: normalRoot,
-    program,
-    checker: program.getTypeChecker(),
+    model,
     blocks,
     outside,
     sharedTests,
-    sourceFiles,
+    compiled,
+    listed,
+    file: (path) => files.get(path) ?? missing(`the file ${path}`),
+    fileAt: (path) => {
+      const file = files.get(path);
+
+      return file?.compiled === true ? file : undefined;
+    },
+    declaration: (id) => declarations.get(id) ?? missing(`the declaration ${id}`),
+    featureAt: (path) => features.get(path),
     blockOf,
-    anyBlockOf: (fileName) => blockOf(fileName) ?? catchAll.get(normal(fileName)),
-    filesOf: (block) => sourceFiles.filter((file) => blockOf(file.fileName) === block),
-    fileAt: (path) => sourceFiles.find((file) => relative(file.fileName) === path),
-    relative,
+    filesOf: (block) => compiled.filter((file) => blockOf(file.path) === block),
+    entriesOf: (block) => entries.get(block.directory) ?? [],
     memo: <T>(key: string, compute: () => T): T => remembered(cache, key, compute),
   };
+}
+
+function missing(what: string): never {
+  throw new Error(`The model names ${what}, but does not hold it`);
 }
 
 function remembered<T>(cache: Map<string, unknown>, key: string, compute: () => T): T {
@@ -90,24 +103,10 @@ function remembered<T>(cache: Map<string, unknown>, key: string, compute: () => 
   return cache.get(key) as T;
 }
 
-function programFor(root: string): ts.Program {
-  const parsed = ts.getParsedCommandLineOfConfigFile(
-    posix.join(root, "tsconfig.check.json"),
-    {},
-    { ...ts.sys, onUnRecoverableConfigFileDiagnostic: failOn },
-  );
-
-  if (parsed === undefined) {
-    throw new Error("tsconfig.check.json could not be read");
-  }
-
-  return ts.createProgram(parsed.fileNames, parsed.options);
-}
-
-function failOn(diagnostic: ts.Diagnostic): never {
-  throw new Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
-}
-
-function normal(path: string): string {
-  return path.replaceAll("\\", "/").replace(/\/$/, "");
+/**
+ * Whether a path is inside a folder of that name anywhere along it, such as `incoming_ports`: what
+ * makes an interface a port. Matched with a slash on each side, so `ports` is not `incoming_ports`.
+ */
+export function inFolder(path: string, name: string): boolean {
+  return `/${path}`.includes(`/${name}/`);
 }

@@ -4,7 +4,20 @@ A map of a hexagon repository and the rules its code is held to, installed into 
 as a git dependency and run from there. `README.md` has the install, the two commands, and what a
 target must provide.
 
-`analysis/` and `steps/` carry their own `AGENTS.md` for what only matters once you work in them.
+`analysis/`, `readers/` and `steps/` carry their own `AGENTS.md` for what only matters once you
+work in them.
+
+## Two parts, one model
+
+- **A reader** (`readers/`) reads a target in its own language and reports the facts the hexagon
+  rests on: which files and declarations there are, what each imports, takes, constructs and
+  implements, line counts, externals, and the door each scenario comes in by. Only the TypeScript
+  reader exists; the C# one is #6.
+- **The hexagon part** (`analysis/`, `steps/`, `server.ts`, `page.html`) makes the map, the Tests
+  view and the rules out of those facts, the same way for every language.
+- **`analysis/model.ts` is the line between them**, and the only thing a reader emits. The hexagon
+  part imports no compiler and reaches a reader only through `readers/read.ts`, which picks the
+  reader from the target's root (`test/boundary.test.ts` holds both).
 
 ## Where the code came from
 
@@ -12,9 +25,9 @@ target must provide.
 it runs from a target's `node_modules`.** That copy is tagged `v0.1.0` and is the **baseline**: every
 change to what the tool outputs is a deliberate one, named in its PR. Clipper's specifics still in
 the code — the three column folders in `analysis/blocks.ts`, `src/index.ts` as the composition root
-in `analysis/arrows.ts`, the production service folder in `analysis/doors.ts` — are what the
-milestone v0.2 issues (#4 shared model, #5 layout check, #6 C# reader) take apart; leave them in
-place until the issue that owns them.
+in `readers/typescript/read.ts`, the production service folder in `readers/typescript/doors/doors.ts`
+— are what the milestone v0.2 issues (#5 layout check, #6 C# reader) take apart; leave them in place
+until the issue that owns them.
 
 **Issue and ADR numbers in the JSDoc (`#74`, `ADR-0023`) are clipper's**: badrfethi/clipper and its
 `docs/adr/`. Most of the reasoning lives in that JSDoc; read it before changing a function, and
@@ -47,8 +60,8 @@ definitions in `steps/` are open (`steps/AGENTS.md`).
 ## How it runs in a target
 
 - **The target is `process.cwd()`.** Nothing resolves a path relative to this package's own files
-  except its own scripts and data (`rules.feature`, `run-feature.ts`, `run-rules.ts`,
-  `scenario-coverage.ts`, `steps/`).
+  except its own scripts and data (`rules.feature`, `analysis/run-rules.ts`, `steps/`,
+  and `run-feature.ts` and `scenario-coverage.ts` in `readers/typescript/doors/`).
 - **No build.** The TypeScript source runs under the target's `tsx` with `--conditions=development`
   (`bin/hexagon-insight.js`), the way the target runs its own features.
 - **One cucumber.** `@cucumber/cucumber`, `@cucumber/gherkin`, `tsx` and `typescript` are peer
@@ -59,8 +72,16 @@ definitions in `steps/` are open (`steps/AGENTS.md`).
 
 ## Verifying
 
-`pnpm typecheck` is the only gate; there is no test suite. A change to behaviour is checked against
-clipper, read-only, at one fixed commit:
+`pnpm typecheck` and `pnpm test` are the gate, and both take seconds. `pnpm test` runs
+`test/*.test.ts` under `node --test`:
+
+- `hexagon.test.ts` runs the map, the Tests view and the rules over `test/fixture/model.json`, a
+  model written by hand, with no reader. `INSIGHT_MODEL=<file>` makes `readers/read.ts` return that
+  JSON file instead of reading the target; such a model measures no doors. It is a test seam, not
+  a setting for targets.
+- `boundary.test.ts` holds the line between the two parts, and how the reader is picked.
+
+A change to behaviour is also checked against clipper, read-only, at one fixed commit:
 
 1. In hexagon-insight, move `node_modules` aside and link it to clipper's
    (`node -e "require('fs').symlinkSync('D:/Projects/clipper/node_modules','node_modules','junction')"`),
@@ -88,8 +109,8 @@ Targets pin a release, `github:badrfethi/hexagon-insight#semver:^X.Y.Z`, so each
 2. **After it merges**, tag the merge commit and push the tag:
    `git tag -a vX.Y.Z <merge commit> -m vX.Y.Z && git push origin vX.Y.Z`.
 3. `.github/workflows/release.yml` runs on the tag: it fails unless the tag is `v` plus the
-   `package.json` version at that commit, runs `pnpm typecheck`, and creates the GitHub Release with
-   generated notes.
+   `package.json` version at that commit, runs `pnpm typecheck` and `pnpm test`, and creates the
+   GitHub Release with generated notes.
 
 A tag is never moved or reused; a bad release is followed by a new one. Adopting a release is the
 target's own issue, in its own repo.

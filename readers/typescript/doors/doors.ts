@@ -1,12 +1,10 @@
-import type { AnalysisContext } from "./context.js";
+import type { Door } from "../../../analysis/model.js";
 import { ranBeyondBuilding } from "./ran.js";
 
-/**
- * The door a behaviour comes in, measured from what its scenario ran (#144, decision 6; #148).
- *
- * - `incoming-port`: straight at `IClipProduction` — the real service ran.
- * - `none`: it did not — a scenario that drives something else directly, such as the configuration
- *   loader, or one adapter or vendor fake asked a question on its own.
+/*
+ * The door a behaviour comes in (`Door` in `analysis/model.ts`), measured from what its scenario
+ * ran (#144, decision 6; #148). Here, `incoming-port` is straight at `IClipProduction` — the real
+ * service ran.
  *
  * The Terminal is no door: it is a Client, and no scenario drives it (ADR-0031). When an incoming
  * adapter stands between a Client and the hexagon, its entry point tests are not scenarios either.
@@ -14,7 +12,19 @@ import { ranBeyondBuilding } from "./ran.js";
  * It is measured rather than read from the steps because step definitions are global: the step file
  * a scenario uses cannot be told from the text, and a declared door would go stale after an edit.
  */
-export type Door = "incoming-port" | "none";
+
+/**
+ * What measuring the doors of one load reads: the root, and a memo that lives as long as the
+ * model it measures for (`read.ts`).
+ */
+export interface DoorLoad {
+  /** The repository root, absolute, with forward slashes. */
+  readonly root: string;
+  /** A file's path relative to the root. */
+  relative(fileName: string): string;
+  /** Computes a value once per load under `key`, and hands back the same value after that. */
+  memo<T>(key: string, compute: () => T): T;
+}
 
 /** What ran in one scenario: for every file, by absolute path, the names of its functions that ran. */
 export type Ran = ReadonlyMap<string, ReadonlySet<string>>;
@@ -31,11 +41,11 @@ const PRODUCTION = "src/infrastructure/staff/clip-production/services/";
  * (`ranBeyondBuilding`): the suite's world builds the whole hexagon for every scenario, whichever
  * door it then uses.
  */
-export function doorOf(context: AnalysisContext, ran: Ran): Door {
+export function doorOf(context: DoorLoad, ran: Ran): Door {
   return ranUnder(context, ran, PRODUCTION) ? "incoming-port" : "none";
 }
 
-function ranUnder(context: AnalysisContext, ran: Ran, folder: string): boolean {
+function ranUnder(context: DoorLoad, ran: Ran, folder: string): boolean {
   return [...ran].some(
     ([file, names]) =>
       context.relative(file).startsWith(folder) && ranBeyondBuilding(context, file, names),

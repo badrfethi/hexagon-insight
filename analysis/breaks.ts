@@ -29,7 +29,7 @@ export interface Break {
 const NOT_BROKEN: readonly string[] = ["PASSED", "SKIPPED", "UNDEFINED", "PENDING"];
 
 /**
- * Runs the rules and turns what failed into breaks.
+ * Runs the rules in the target at `root` and turns what failed into breaks.
  *
  * A step in `steps/` fails with one offence per line, each opening with the file it
  * names (`refuseAny` in `steps/world.ts`), so one failing scenario becomes a break **per offence**:
@@ -43,8 +43,11 @@ const NOT_BROKEN: readonly string[] = ["PASSED", "SKIPPED", "UNDEFINED", "PENDIN
  * run. A step that is **undefined** or pending is not a break: it is a rule whose steps an agent has
  * not written yet (#74, decision 15), not code that broke one, and `hexagon-insight rules` names it.
  */
-export async function breaksOf(context: AnalysisContext): Promise<readonly Break[]> {
-  const found = breaksIn(context, await runRules(context.root));
+export async function breaksOf(
+  context: AnalysisContext,
+  root: string,
+): Promise<readonly Break[]> {
+  const found = breaksIn(context, await runRules(root));
 
   return found.map((broken) => ({ ...broken, view: viewOf(context, broken) }));
 }
@@ -70,7 +73,7 @@ function viewOf(context: AnalysisContext, broken: Unplaced): Break["view"] {
 /** What Tests draws: each suite's folder, and each file the suites share (`shared-tests.ts`). */
 function onTests(context: AnalysisContext): readonly string[] {
   return context.memo("on-tests", () => [
-    ...testKinds(context.root).map((kind) => `${kind.folder}/`),
+    ...testKinds(context.model.rootEntries).map((kind) => `${kind.folder}/`),
     ...context.sharedTests.map(({ path }) => path),
   ]);
 }

@@ -101,7 +101,9 @@ dependency run for real, and the Tests view draws it as real.
 ## What the target provides
 
 - `tsconfig.check.json` at its root: one TypeScript program over everything insight should read
-  (`src` and the test folders).
+  (`src` and the test folders). It is also how insight knows the target is TypeScript: a `*.sln` or
+  `*.slnx` at the root marks a C# target, which insight does not read yet, and a root with both, or
+  with neither, is refused with a message naming what it found.
 - `src/infrastructure/staff`, `src/infrastructure/suppliers` and `src/adapters`, one block per
   folder under each, and `src/index.ts` as the composition root.
 - Its tests in the four folders above: `features/` always, and `entry-points/`, `core-tests/` and

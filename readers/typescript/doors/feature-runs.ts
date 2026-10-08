@@ -3,16 +3,9 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AnalysisContext } from "./context.js";
-import { type Door, doorOf, doorOfRows, type Ran } from "./doors.js";
+import type { Door, ScenarioDoor } from "../../../analysis/model.js";
+import { type DoorLoad, doorOf, doorOfRows, type Ran } from "./doors.js";
 import type { ScenarioRecord } from "./scenario-coverage.js";
-
-/** One scenario of a feature: the file it is in, relative to the root, its line, and its door. */
-export interface ScenarioDoor {
-  readonly path: string;
-  readonly line: number;
-  readonly door: Door;
-}
 
 /**
  * Every scenario of every feature directly under `folder`, and the door it came in, measured by
@@ -25,14 +18,14 @@ export interface ScenarioDoor {
  * is one scenario here, with one door for all of its rows. The runs are memoised for the load.
  */
 export async function scenarioDoors(
-  context: AnalysisContext,
+  context: DoorLoad,
   folder: string,
 ): Promise<readonly ScenarioDoor[]> {
   return await context.memo(`doors:${folder}`, () => measureFeatures(context, folder));
 }
 
 async function measureFeatures(
-  context: AnalysisContext,
+  context: DoorLoad,
   folder: string,
 ): Promise<readonly ScenarioDoor[]> {
   const features = await featureFiles(context.root, folder);
@@ -60,7 +53,7 @@ interface ScenarioRun {
  * One cucumber run of a feature file, under the `default` profile. A scenario that fails still
  * counts for what it ran, so a red scenario still has a door.
  */
-async function measure(context: AnalysisContext, path: string): Promise<readonly ScenarioDoor[]> {
+async function measure(context: DoorLoad, path: string): Promise<readonly ScenarioDoor[]> {
   const runs = await scenariosRunBy(context.root, path);
 
   return [...doorsOf(context, runs)].map(([line, door]) => ({ path, line, door }));
@@ -68,7 +61,7 @@ async function measure(context: AnalysisContext, path: string): Promise<readonly
 
 /** Each scenario's door, with the rows of an outline — which share its line — read as one. */
 function doorsOf(
-  context: AnalysisContext,
+  context: DoorLoad,
   runs: readonly ScenarioRun[],
 ): ReadonlyMap<number, Door> {
   const byLine = new Map<number, Door[]>();

@@ -1,5 +1,4 @@
-import { posix } from "node:path";
-import ts from "typescript";
+import type { CodeFile } from "./model.js";
 
 /**
  * A code file outside `src/` and outside every suite's folder that only the suites import: what
@@ -16,14 +15,15 @@ export interface SharedTestFile {
   readonly usedBy: readonly string[];
 }
 
-/** `tests` is the folders a kind of test lives in (`test-kinds.ts`). */
+/**
+ * `files` is the files the reader compiled, in path order, whose imports are read
+ * (`CodeFile.importedFiles`). `tests` is the folders a kind of test lives in (`test-kinds.ts`).
+ */
 export function sharedTestFiles(
-  root: string,
-  program: ts.Program,
-  files: readonly ts.SourceFile[],
+  files: readonly CodeFile[],
   tests: readonly string[],
 ): readonly SharedTestFile[] {
-  const importers = importersOf(root, program, files);
+  const importers = importersOf(files);
 
   return [...importers]
     .filter(([path]) => !path.startsWith("src/") && folderOf(tests, path) === undefined)
@@ -48,44 +48,14 @@ function folderOf(tests: readonly string[], path: string): string | undefined {
 }
 
 /** Each of the repository's files that another imports, to the files importing it. */
-function importersOf(
-  root: string,
-  program: ts.Program,
-  files: readonly ts.SourceFile[],
-): ReadonlyMap<string, readonly string[]> {
+function importersOf(files: readonly CodeFile[]): ReadonlyMap<string, readonly string[]> {
   const importers = new Map<string, string[]>();
 
   for (const file of files) {
-    const from = posix.relative(root, file.fileName);
-
-    for (const path of importedBy(root, program, file)) {
-      importers.set(path, [...(importers.get(path) ?? []), from]);
+    for (const path of file.importedFiles) {
+      importers.set(path, [...(importers.get(path) ?? []), file.path]);
     }
   }
 
   return importers;
-}
-
-/** The repository files one file imports or re-exports from, relative to the root. */
-function importedBy(root: string, program: ts.Program, file: ts.SourceFile): readonly string[] {
-  return file.statements
-    .flatMap((statement) => specifierOf(statement) ?? [])
-    .flatMap((specifier) => resolved(program, specifier, file.fileName) ?? [])
-    .filter((fileName) => !fileName.includes("/node_modules/"))
-    .map((fileName) => posix.relative(root, fileName));
-}
-
-function specifierOf(statement: ts.Statement): string | undefined {
-  return ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)
-    ? textOf(statement.moduleSpecifier)
-    : undefined;
-}
-
-function textOf(specifier: ts.Expression | undefined): string | undefined {
-  return specifier !== undefined && ts.isStringLiteral(specifier) ? specifier.text : undefined;
-}
-
-function resolved(program: ts.Program, specifier: string, from: string): string | undefined {
-  return ts.resolveModuleName(specifier, from, program.getCompilerOptions(), ts.sys).resolvedModule
-    ?.resolvedFileName;
 }

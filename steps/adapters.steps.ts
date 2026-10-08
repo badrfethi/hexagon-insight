@@ -23,7 +23,8 @@ const LANES: Readonly<Record<string, Lane>> = {
 
 Given(
   "the {word} adapters under {string}",
-  function (this: RulesWorld, direction: string, path: string) {
+  async function (this: RulesWorld, direction: string, path: string) {
+    await this.read();
     // An unknown word selects no lane, so every Then after it would pass over nothing.
     const lane = Object.hasOwn(LANES, direction) ? LANES[direction] : undefined;
     refuseAny(lane === undefined ? [`${path}: "${direction}" is not incoming or outgoing`] : []);
@@ -57,9 +58,7 @@ Then("none of them is run by a feature under {string}", function (this: RulesWor
 
 /** The adapters directly under a path, refusing a path with none, so a moved folder cannot pass vacuously. */
 function adaptersUnder(context: AnalysisContext, path: string): readonly Block[] {
-  const under = context.blocks.filter(
-    (block) => posix.dirname(context.relative(block.directory)) === path,
-  );
+  const under = context.blocks.filter((block) => posix.dirname(block.directory) === path);
   refuseAny(under.length === 0 ? [`${path}: holds no adapters`] : []);
 
   return under;

@@ -1,0 +1,364 @@
+{
+  "groups": [
+    {
+      "path": "src/infrastructure/staff/orders",
+      "entries": ["incoming_ports", "services"]
+    },
+    {
+      "path": "src/infrastructure/suppliers/exchange",
+      "entries": ["outgoing_ports"]
+    },
+    {
+      "path": "src/adapters/simulated-exchange",
+      "entries": ["simulated-exchange.ts"]
+    },
+    {
+      "path": "src/adapters/web-api",
+      "entries": ["web-api.ts"]
+    }
+  ],
+  "rootEntries": ["contracts", "features", "fixtures", "src", "tools", "tsconfig.check.json"],
+  "features": [
+    {
+      "path": "contracts/exchange.feature",
+      "text": "Feature: The exchange\n\n  Scenario: An order is filled\n    Given an order for one coin\n    Then the exchange fills it\n"
+    },
+    {
+      "path": "features/place-order.feature",
+      "text": "Feature: Placing an order\n\n  Scenario: A trader places an order\n    Given a price\n    When the trader places an order\n    Then the exchange is sent it\n\n  Scenario Outline: A trader places <count> orders\n    When the trader places <count> orders\n\n    Examples:\n      | count |\n      | 1     |\n      | 2     |\n"
+    }
+  ],
+  "files": [
+    {
+      "path": "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 3,
+      "externals": [],
+      "declares": ["src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts#IPlaceOrder"],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": []
+    },
+    {
+      "path": "src/infrastructure/staff/orders/services/OrderPlacer.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 12,
+      "externals": [],
+      "declares": ["src/infrastructure/staff/orders/services/OrderPlacer.ts#OrderPlacer"],
+      "imports": [
+        "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts#IPlaceOrder",
+        "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange"
+      ],
+      "constructorParameterTypes": [
+        "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange"
+      ],
+      "constructs": [],
+      "importedFiles": [
+        "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts",
+        "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts"
+      ]
+    },
+    {
+      "path": "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 4,
+      "externals": [],
+      "declares": ["src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange"],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": []
+    },
+    {
+      "path": "src/adapters/simulated-exchange/simulated-exchange.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 20,
+      "externals": ["node:crypto"],
+      "declares": ["src/adapters/simulated-exchange/simulated-exchange.ts#SimulatedExchange"],
+      "imports": ["src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange"],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": ["src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts"]
+    },
+    {
+      "path": "src/adapters/web-api/web-api.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 30,
+      "externals": ["zod", "node:http"],
+      "declares": ["src/adapters/web-api/web-api.ts#WebApi"],
+      "imports": ["src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts#IPlaceOrder"],
+      "constructorParameterTypes": [
+        "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts#IPlaceOrder"
+      ],
+      "constructs": [],
+      "importedFiles": ["src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts"]
+    },
+    {
+      "path": "src/index.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 8,
+      "externals": [],
+      "declares": [],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [
+        "src/adapters/simulated-exchange/simulated-exchange.ts#SimulatedExchange",
+        "src/infrastructure/staff/orders/services/OrderPlacer.ts#OrderPlacer",
+        "src/adapters/web-api/web-api.ts#WebApi"
+      ],
+      "importedFiles": [
+        "src/adapters/simulated-exchange/simulated-exchange.ts",
+        "src/infrastructure/staff/orders/services/OrderPlacer.ts",
+        "src/adapters/web-api/web-api.ts"
+      ]
+    },
+    {
+      "path": "tools/report.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 6,
+      "externals": ["node:fs"],
+      "declares": [],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": []
+    },
+    {
+      "path": "contracts/exchange.feature",
+      "listed": true,
+      "compiled": false,
+      "linesOfCode": 4,
+      "externals": [],
+      "declares": [],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": []
+    },
+    {
+      "path": "contracts/support/exchange.steps.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 10,
+      "externals": ["@cucumber/cucumber"],
+      "declares": [],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": ["src/adapters/simulated-exchange/simulated-exchange.ts#SimulatedExchange"],
+      "importedFiles": ["src/adapters/simulated-exchange/simulated-exchange.ts"]
+    },
+    {
+      "path": "features/place-order.feature",
+      "listed": true,
+      "compiled": false,
+      "linesOfCode": 11,
+      "externals": [],
+      "declares": [],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": []
+    },
+    {
+      "path": "features/support/clock.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 5,
+      "externals": [],
+      "declares": ["features/support/clock.ts#Clock"],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": []
+    },
+    {
+      "path": "features/support/doubles.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 15,
+      "externals": [],
+      "declares": ["features/support/doubles.ts#FakeExchange"],
+      "imports": ["src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange"],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": ["src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts"]
+    },
+    {
+      "path": "features/support/steps.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 9,
+      "externals": ["@cucumber/cucumber"],
+      "declares": [],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": ["fixtures/prices.ts"]
+    },
+    {
+      "path": "features/support/world.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 14,
+      "externals": ["@cucumber/cucumber"],
+      "declares": ["features/support/world.ts#OrdersWorld"],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [
+        "features/support/doubles.ts#FakeExchange",
+        "features/support/clock.ts#Clock",
+        "src/infrastructure/staff/orders/services/OrderPlacer.ts#OrderPlacer"
+      ],
+      "importedFiles": [
+        "features/support/doubles.ts",
+        "features/support/clock.ts",
+        "src/infrastructure/staff/orders/services/OrderPlacer.ts"
+      ]
+    },
+    {
+      "path": "fixtures/prices.ts",
+      "listed": true,
+      "compiled": true,
+      "linesOfCode": 7,
+      "externals": [],
+      "declares": [],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": []
+    }
+  ],
+  "declarations": [
+    {
+      "id": "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts#IPlaceOrder",
+      "name": "IPlaceOrder",
+      "kind": "interface",
+      "file": "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts",
+      "line": 2,
+      "exported": true,
+      "implements": [],
+      "buildsPerScenario": [],
+      "doc": "What a trader asks of the hexagon.",
+      "linesOfCode": 0
+    },
+    {
+      "id": "src/infrastructure/staff/orders/services/OrderPlacer.ts#OrderPlacer",
+      "name": "OrderPlacer",
+      "kind": "class",
+      "file": "src/infrastructure/staff/orders/services/OrderPlacer.ts",
+      "line": 4,
+      "exported": true,
+      "implements": [
+        {
+          "written": "IPlaceOrder",
+          "target": "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts#IPlaceOrder"
+        }
+      ],
+      "buildsPerScenario": [],
+      "doc": "",
+      "linesOfCode": 9
+    },
+    {
+      "id": "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange",
+      "name": "IExchange",
+      "kind": "interface",
+      "file": "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts",
+      "line": 1,
+      "exported": true,
+      "implements": [],
+      "buildsPerScenario": [],
+      "doc": "",
+      "linesOfCode": 0
+    },
+    {
+      "id": "src/adapters/simulated-exchange/simulated-exchange.ts#SimulatedExchange",
+      "name": "SimulatedExchange",
+      "kind": "class",
+      "file": "src/adapters/simulated-exchange/simulated-exchange.ts",
+      "line": 5,
+      "exported": true,
+      "implements": [
+        {
+          "written": "IExchange",
+          "target": "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange"
+        }
+      ],
+      "buildsPerScenario": [],
+      "doc": "",
+      "linesOfCode": 16
+    },
+    {
+      "id": "src/adapters/web-api/web-api.ts#WebApi",
+      "name": "WebApi",
+      "kind": "class",
+      "file": "src/adapters/web-api/web-api.ts",
+      "line": 6,
+      "exported": true,
+      "implements": [],
+      "buildsPerScenario": [],
+      "doc": "",
+      "linesOfCode": 24
+    },
+    {
+      "id": "features/support/clock.ts#Clock",
+      "name": "Clock",
+      "kind": "class",
+      "file": "features/support/clock.ts",
+      "line": 1,
+      "exported": true,
+      "implements": [],
+      "buildsPerScenario": [],
+      "doc": "A real clock, run as it is.",
+      "linesOfCode": 5
+    },
+    {
+      "id": "features/support/doubles.ts#FakeExchange",
+      "name": "FakeExchange",
+      "kind": "class",
+      "file": "features/support/doubles.ts",
+      "line": 4,
+      "exported": true,
+      "implements": [
+        {
+          "written": "IExchange",
+          "target": "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange"
+        },
+        { "written": "Disposable" }
+      ],
+      "buildsPerScenario": [],
+      "doc": "The exchange: a Fake, and a Spy. It fills every order, and a Stub is not what it is.",
+      "linesOfCode": 11
+    },
+    {
+      "id": "features/support/world.ts#OrdersWorld",
+      "name": "OrdersWorld",
+      "kind": "class",
+      "file": "features/support/world.ts",
+      "line": 6,
+      "exported": true,
+      "implements": [],
+      "buildsPerScenario": [
+        "features/support/doubles.ts#FakeExchange",
+        "features/support/clock.ts#Clock",
+        "src/infrastructure/staff/orders/services/OrderPlacer.ts#OrderPlacer"
+      ],
+      "doc": "",
+      "linesOfCode": 10
+    }
+  ],
+  "compositionRoots": ["src/index.ts"],
+  "steps": [
+    {
+      "steps": "contracts/support/exchange.steps.ts",
+      "feature": "contracts/exchange.feature"
+    }
+  ]
+}

@@ -1,19 +1,16 @@
 import { posix } from "node:path";
-import type ts from "typescript";
 import type { AnalysisContext } from "./context.js";
 import { type ConstructedAdapter, constructedAdapters, parseFeature } from "./contracts.js";
 import { doublesIn, realFilesIn, type TestDouble } from "./doubles.js";
-import { codeLinesIn } from "./lines.js";
-import { codeFiles } from "./outside.js";
+import type { CodeFile } from "./model.js";
 import { readScenarios } from "./scenarios.js";
 import { testKinds } from "./test-kinds.js";
-import { readFileSync } from "node:fs";
 
 /**
  * The Tests view (#166): one lane per kind of test, and what stands behind each test in it.
  *
- * Everything is read from the files — the suites' folders (`test-kinds.ts`) for what is in
- * them, the program for the doubles and what each steps file builds — and nothing is run, so it
+ * Everything is read from the model (`model.ts`) — the suites' folders (`test-kinds.ts`) for what
+ * is in them, the code for the doubles and what each steps file builds — and nothing is run, so it
  * answers without waiting on the rules or on a feature. Every code file in a lane's folder is drawn
  * exactly once: a `.feature` as a feature, a steps file beside its feature, a file of Test Doubles
  * as its doubles, and everything else in the box of what runs in every test of the kind. What the
@@ -81,18 +78,17 @@ export interface SupportFile {
 }
 
 export function testsView(context: AnalysisContext): TestsView {
-  const files = codeFiles(context.root);
-  const kinds = testKinds(context.root);
+  const kinds = testKinds(context.model.rootEntries);
 
   return {
     lanes: kinds.map((kind) => ({
       ...kind,
-      ...contentsOf(context, kind.folder, files),
+      ...contentsOf(context, kind.folder, context.listed),
     })),
     shared: context.sharedTests.map(({ path, usedBy }) => ({
       id: path,
       name: path,
-      linesOfCode: codeLinesIn(posix.join(context.root, path)),
+      linesOfCode: context.file(path).linesOfCode,
       usedBy: kinds.filter((kind) => usedBy.includes(kind.folder)).map((kind) => kind.kind),
     })),
   };
@@ -105,7 +101,9 @@ function contentsOf(context: AnalysisContext, folder: string, files: readonly st
   const featurePaths = own.filter(
     (path) => posix.dirname(path) === folder && path.endsWith(".feature"),
   );
-  const steps = new Map(featurePaths.map((path) => [path, stepsPathOf(path, own)] as const));
+  const steps = new Map(
+    featurePaths.map((path) => [path, stepsPathOf(context, path, own)] as const),
+  );
   const paired = new Set(steps.values());
   const scripts = own.flatMap((path) => context.fileAt(path) ?? []);
   const doubles = doublesIn(context, scripts);
@@ -123,23 +121,36 @@ function contentsOf(context: AnalysisContext, folder: string, files: readonly st
   };
 }
 
-/** `contracts/crayo.feature` is paired with `contracts/support/crayo.steps.ts`, if there is one. */
-function stepsPathOf(feature: string, files: readonly string[]): string | null {
-  const name = posix.basename(feature, ".feature");
-  const path = posix.join(posix.dirname(feature), "support", `${name}.steps.ts`);
+/**
+ * The steps file the reader pairs a feature with (`Code.steps`), if it is in the lane's folder: in
+ * a TypeScript target, `contracts/crayo.feature` with `contracts/support/crayo.steps.ts`.
+ */
+function stepsPathOf(
+  context: AnalysisContext,
+  feature: string,
+  files: readonly string[],
+): string | null {
+  const pair = context.model.steps.find(
+    ({ steps, feature: paired }) => paired === feature && files.includes(steps),
+  );
 
-  return files.includes(path) ? path : null;
+  return pair?.steps ?? null;
 }
 
 function featureOf(context: AnalysisContext, path: string, steps: string | null): TestFeature {
-  const file = posix.join(context.root, path);
-  const document = parseFeature(readFileSync(file, "utf8"));
+  const text = context.featureAt(path)?.text;
+
+  if (text === undefined) {
+    throw new Error(`${path} is listed as code, but the model holds no text for it`);
+  }
+
+  const document = parseFeature(text);
   const scenarios = readScenarios(document);
 
   return {
     id: path,
     name: document.feature?.name ?? posix.basename(path),
-    linesOfCode: codeLinesIn(file),
+    linesOfCode: context.file(path).linesOfCode,
     scenarios: scenarios.count,
     scenarioNames: scenarios.names,
     steps: steps === null ? null : stepsOf(context, steps),
@@ -152,7 +163,7 @@ function stepsOf(context: AnalysisContext, path: string): StepsFile {
   return {
     id: path,
     name: posix.basename(path),
-    linesOfCode: codeLinesIn(posix.join(context.root, path)),
+    linesOfCode: context.file(path).linesOfCode,
     adapters: file === undefined ? [] : constructedAdapters(context, file),
   };
 }
@@ -161,14 +172,14 @@ function supportOf(
   context: AnalysisContext,
   folder: string,
   paths: readonly string[],
-  scripts: readonly ts.SourceFile[],
+  scripts: readonly CodeFile[],
 ): readonly SupportFile[] {
   const real = realFilesIn(context, scripts);
 
   return paths.map((path) => ({
     id: path,
     name: posix.relative(folder, path),
-    linesOfCode: codeLinesIn(posix.join(context.root, path)),
+    linesOfCode: context.file(path).linesOfCode,
     real: real.has(path),
   }));
 }

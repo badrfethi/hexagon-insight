@@ -1,8 +1,5 @@
-import ts from "typescript";
-import type { AnalysisContext } from "./context.js";
-import { implementedBy } from "./contracts.js";
-import { codeLinesOf } from "./lines.js";
-import { declarationOf, descendants, isClass } from "./symbols.js";
+import { type AnalysisContext, inFolder } from "./context.js";
+import type { CodeFile, Declaration } from "./model.js";
 import { firstSentence } from "./test-kinds.js";
 
 /**
@@ -35,60 +32,37 @@ const KIND = /\b(?:Dummy|Stub|Spy|Mock|Fake)\b/g;
 
 export function doublesIn(
   context: AnalysisContext,
-  files: readonly ts.SourceFile[],
+  files: readonly CodeFile[],
 ): readonly TestDouble[] {
   return files
-    .flatMap(classesIn)
+    .flatMap((file) => classesIn(context, file))
     .filter((declaration) => implementsOutgoingPort(context, declaration))
-    .map((declaration) => doubleOf(context, declaration));
+    .map(doubleOf);
 }
 
-function classesIn(file: ts.SourceFile): readonly ts.ClassDeclaration[] {
-  return file.statements.filter(ts.isClassDeclaration);
+/** The classes a file declares at its top level, in the order written. */
+function classesIn(context: AnalysisContext, file: CodeFile): readonly Declaration[] {
+  return file.declares
+    .map((id) => context.declaration(id))
+    .filter((declaration) => declaration.kind === "class");
 }
 
-function implementsOutgoingPort(
-  context: AnalysisContext,
-  declaration: ts.ClassDeclaration,
-): boolean {
-  return implementedTypes(declaration).some((type) =>
-    declaredUnder(context, type.expression, "/outgoing_ports/"),
+function implementsOutgoingPort(context: AnalysisContext, declaration: Declaration): boolean {
+  return declaration.implements.some(
+    ({ target }) =>
+      target !== undefined && inFolder(context.declaration(target).file, "outgoing_ports"),
   );
 }
 
-function implementedTypes(
-  declaration: ts.ClassDeclaration,
-): readonly ts.ExpressionWithTypeArguments[] {
-  return (declaration.heritageClauses ?? [])
-    .filter((clause) => clause.token === ts.SyntaxKind.ImplementsKeyword)
-    .flatMap((clause) => clause.types);
-}
-
-function declaredUnder(context: AnalysisContext, name: ts.Node, folder: string): boolean {
-  const declaration = declarationOf(context, name);
-
-  return declaration?.getSourceFile().fileName.includes(folder) ?? false;
-}
-
-function doubleOf(context: AnalysisContext, declaration: ts.ClassDeclaration): TestDouble {
-  const file = context.relative(declaration.getSourceFile().fileName);
-  const name = declaration.name?.text ?? "";
-
+function doubleOf(declaration: Declaration): TestDouble {
   return {
-    id: `${file}#${name}`,
-    name,
-    file,
-    kinds: kindsIn(summaryOf(declaration)),
-    ports: implementedBy(declaration),
-    linesOfCode: codeLinesOf(declaration),
+    id: `${declaration.file}#${declaration.name}`,
+    name: declaration.name,
+    file: declaration.file,
+    kinds: kindsIn(firstSentence(declaration.doc)),
+    ports: declaration.implements.map(({ written }) => written),
+    linesOfCode: declaration.linesOfCode,
   };
-}
-
-/** The first sentence of a declaration's doc comment, or nothing if it has none. */
-function summaryOf(declaration: ts.Declaration): string {
-  const doc = ts.getJSDocCommentsAndTags(declaration).find(ts.isJSDoc);
-
-  return firstSentence(ts.getTextOfJSDocComment(doc?.comment) ?? "");
 }
 
 function kindsIn(summary: string): readonly string[] {
@@ -101,43 +75,20 @@ function kindsIn(summary: string): readonly string[] {
  *
  * A double is found by the port it stands at, so what the world builds and stands at no port is
  * the real thing — a dependency run for real in the suite, such as the media host serving Source
- * Videos over real HTTP. It is found by what the world does, not listed.
+ * Videos over real HTTP. It is found by what the world does (`Declaration.buildsPerScenario`), not
+ * listed.
  */
 export function realFilesIn(
   context: AnalysisContext,
-  files: readonly ts.SourceFile[],
+  files: readonly CodeFile[],
 ): ReadonlySet<string> {
-  const own = new Set(files);
+  const own = new Set(files.map((file) => file.path));
   const built = files
-    .flatMap(classesIn)
-    .filter(isWorld)
-    .flatMap((world) => builtBy(context, world))
-    .filter((declaration) => own.has(declaration.getSourceFile()))
-    .filter((declaration) => implementedTypes(declaration).length === 0);
+    .flatMap((file) => classesIn(context, file))
+    .flatMap((world) => world.buildsPerScenario)
+    .map((id) => context.declaration(id))
+    .filter((declaration) => own.has(declaration.file))
+    .filter((declaration) => declaration.implements.length === 0);
 
-  return new Set(
-    built.map((declaration) => context.relative(declaration.getSourceFile().fileName)),
-  );
-}
-
-/** A suite's world: the class that extends cucumber's `World`. */
-function isWorld(declaration: ts.ClassDeclaration): boolean {
-  return (declaration.heritageClauses ?? []).some(
-    (clause) =>
-      clause.token === ts.SyntaxKind.ExtendsKeyword &&
-      clause.types.some((type) => type.expression.getText() === "World"),
-  );
-}
-
-/** The classes a world builds as its own fields, which is what every scenario gets. */
-function builtBy(
-  context: AnalysisContext,
-  world: ts.ClassDeclaration,
-): readonly ts.ClassDeclaration[] {
-  return world.members
-    .filter(ts.isPropertyDeclaration)
-    .flatMap((property) => (property.initializer ? descendants(property.initializer) : []))
-    .filter(ts.isNewExpression)
-    .map((construction) => declarationOf(context, construction.expression))
-    .filter(isClass);
+  return new Set(built.map((declaration) => declaration.file));
 }
