@@ -5,22 +5,30 @@ and breaks. `server.ts` serves two views of it, `/map.json` (`map.ts`) and `/tes
 (`tests.ts`); the steps in `../steps/` read the same analysis, so the rules and the page never
 disagree (#86: "no second parser").
 
+## It reads the model, and nothing else
+
+The hexagon part knows no language. Everything it knows about a target is the `Model` in
+`model.ts`, which a reader in `../readers/` emits: files, declarations and what they import, take,
+construct and implement, line counts, externals, which files are test code, folder entries and
+listings, the folders the reader claims, feature texts and doors. So no file
+here imports `typescript`, reads the target's files or runs git, and the only thing it imports from
+`../readers/` is `read.ts`, the front door (`../test/boundary.test.ts` fails otherwise). Spawning
+cucumber for the rules (`rules-run.ts`, `run-rules.ts`) is the one process it starts.
+
+A fact the hexagon part needs and the model lacks goes into `model.ts`, documented, and into every
+reader; it is never read here behind the model's back. A rule of the hexagon (what makes an arrow, a
+lane, a double, a break) is computed here from the facts, never in a reader, so every language gets
+the same answer.
+
 ## One load, one context
 
-`context.ts` builds the TypeScript program and everything derived from it once per page load, and
+`contextOf(model)` in `context.ts` builds everything derived from a model once per page load, and
 `context.memo` is where anything expensive a second caller would recompute goes. Nothing is stored
 between loads: the page always shows the working tree as it is. A function that takes an
-`AnalysisContext` reads through it, never from disk or a second program of its own.
+`AnalysisContext` reads through it, never from the model's arrays by a second route.
 
-## Two kinds of file, which #4 splits
-
-- **Bound to the TypeScript compiler**: `arrows`, `context`, `contracts`, `doubles`, `externals`,
-  `lines`, `ran`, `shared-tests`, `symbols`, `tests`. These become the TypeScript reader.
-- **Bound to the Node runtime**, measuring doors by running features under V8 coverage:
-  `feature-runs`, `run-feature`, `scenario-coverage`, `rules-run`, `outside`.
-
-Until #4 lands, keep new compiler-bound code out of the files that are not, so the split stays a
-move rather than a rewrite.
+Paths in the model are relative to the target's root, with `/`. `inFolder` in `context.ts` matches
+a folder name the way the code did when paths were absolute, so a match does not change with them.
 
 ## What is stated here, not read from a target
 

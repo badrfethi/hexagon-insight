@@ -1,5 +1,5 @@
 import ts from "typescript";
-import type { AnalysisContext } from "./context.js";
+import type { DoorLoad } from "./doors.js";
 
 /**
  * Whether a file ran a function other than those importing it or constructing its classes runs.
@@ -13,7 +13,7 @@ import type { AnalysisContext } from "./context.js";
  * The door of a scenario (`doors.ts`) is read this way.
  */
 export function ranBeyondBuilding(
-  context: AnalysisContext,
+  context: DoorLoad,
   file: string,
   names: ReadonlySet<string>,
 ): boolean {

@@ -36,26 +36,29 @@ Feature: The hexagon's rules
 
   Rule: An outgoing adapter has a contract test, and an incoming adapter has an entry point test
     An outgoing adapter is checked against the real supplier it was written against, by a contract
-    test in `contracts/`. An incoming adapter is checked at its outer surface, with the incoming port
-    faked, by an entry point test in `entry-points/`. Neither has the other kind. The lane decides,
-    and there is no exception: a Client standing in as the driving adapter is an incoming adapter
-    with no entry point test, and shows here as a break.
+    test in `tests/contracts/`. An incoming adapter is checked at its outer surface, with the
+    incoming port faked, by an entry point test in `tests/entry-points/`. Either kind is a feature
+    or a plain test, and it is the test of each adapter it constructs. The lane decides, and there
+    is no exception: a Client standing in as the driving adapter is an incoming adapter with no
+    entry point test, and shows here as a break. An adapter that drives an incoming port and also
+    implements an outgoing one is in both lanes, and has both kinds; any other adapter has only its
+    own.
 
     Scenario: every outgoing adapter has a contract test
       Given the outgoing adapters under "src/adapters"
-      Then each of them is run by a feature under "contracts"
+      Then each of them is run by a test under "tests/contracts"
 
-    Scenario: no outgoing adapter has an entry point test
-      Given the outgoing adapters under "src/adapters"
-      Then none of them is run by a feature under "entry-points"
+    Scenario: no adapter that is only outgoing has an entry point test
+      Given the adapters under "src/adapters" that are only outgoing
+      Then none of them is run by a test under "tests/entry-points"
 
     Scenario: every incoming adapter has an entry point test
       Given the incoming adapters under "src/adapters"
-      Then each of them is run by a feature under "entry-points"
+      Then each of them is run by a test under "tests/entry-points"
 
-    Scenario: no incoming adapter has a contract test
-      Given the incoming adapters under "src/adapters"
-      Then none of them is run by a feature under "contracts"
+    Scenario: no adapter that is only incoming has a contract test
+      Given the adapters under "src/adapters" that are only incoming
+      Then none of them is run by a test under "tests/contracts"
 
   Rule: Every acceptance scenario comes in through an incoming port
     An acceptance test drives an incoming port, with a Test Double at each outgoing port. Which door
@@ -65,3 +68,36 @@ Feature: The hexagon's rules
     Scenario: every scenario under "features" comes in through an incoming port
       Given the scenarios under "features"
       Then each of them came in through an incoming port
+
+  Rule: A target is laid out in the hexagon's folders
+    A target keeps its code in the tool's folders: staff and supplier groups under
+    `src/infrastructure`, adapters under `src/adapters`, and the core, if it has one, in `src/core`.
+    A language's reader may claim what its language needs beside them, such as the project that
+    wires the application. Any other folder there is one the hexagon does not have. Test code that
+    uses the application's code lives in one of the four test folders: `features/`, `tests/core/`,
+    `tests/entry-points/` and `tests/contracts/`.
+
+    Scenario: the hexagon's folders are there
+      Given the target's root
+      Then it has "src/infrastructure/staff", "src/infrastructure/suppliers", "src/adapters" and "features"
+
+    Scenario: nothing else sits in "src"
+      Given the folders directly under "src"
+      Then each of them is "infrastructure", "adapters" or "core", or is claimed by the target's reader
+
+    Scenario: nothing else sits in "src/infrastructure"
+      Given the folders directly under "src/infrastructure"
+      Then each of them is "staff" or "suppliers", or is claimed by the target's reader
+
+    Scenario: test code that uses the application lives in a test folder
+      Given the test code that uses code under "src"
+      Then each of it is under "features", "tests/core", "tests/entry-points" or "tests/contracts"
+
+  Rule: The core stands on nothing
+    The core is what the staff stand on, so it uses nothing of the target's outside `src/core`:
+    no group, no adapter, no other code. What it takes from outside the repository, a package, is
+    its own business.
+
+    Scenario: no file in "src/core" uses the target's code outside it
+      Given the files under "src/core"
+      Then none of them uses the target's code outside "src/core"

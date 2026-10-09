@@ -15,5 +15,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["server.ts", "analysis", "steps"]
+  "include": ["server.ts", "analysis", "steps", "readers", "test"]
 }

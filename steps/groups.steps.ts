@@ -1,10 +1,8 @@
-import { existsSync } from "node:fs";
 import { posix } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import ts from "typescript";
 import type { Block } from "../analysis/blocks.js";
 import type { AnalysisContext } from "../analysis/context.js";
-import { declarationOf, isExported, lineAt } from "../analysis/symbols.js";
+import type { CodeFile, Declaration } from "../analysis/model.js";
 import { refuseAny, type RulesWorld } from "./world.js";
 
 /**
@@ -15,7 +13,8 @@ import { refuseAny, type RulesWorld } from "./world.js";
  * `implements` clauses: a class declared in the named place whose clause names the interface.
  */
 
-Given("the groups under {string}", function (this: RulesWorld, path: string) {
+Given("the groups under {string}", async function (this: RulesWorld, path: string) {
+  await this.read();
   this.groups = groupsUnder(this.context, path);
 });
 
@@ -25,10 +24,7 @@ Then(
     refuseAny(
       this.groups
         .filter((group) => foldersWithContracts(this.context, group, [one, other]) === 0)
-        .map(
-          (group) =>
-            `${this.context.relative(group.directory)}: has no interface in ${one}/ or ${other}/`,
-        ),
+        .map((group) => `${group.directory}: has no interface in ${one}/ or ${other}/`),
     );
   },
 );
@@ -39,10 +35,10 @@ Then(
     refuseAny([
       ...this.groups
         .filter((group) => contractsOf(this.context, group, [ports]).length === 0)
-        .map((group) => `${this.context.relative(group.directory)}: has no interface in ${ports}/`),
+        .map((group) => `${group.directory}: has no interface in ${ports}/`),
       ...this.groups
-        .filter((group) => existsSync(posix.join(group.directory, forbidden)))
-        .map((group) => `${this.context.relative(group.directory)}/${forbidden}: is here`),
+        .filter((group) => this.context.entriesOf(group).includes(forbidden))
+        .map((group) => `${group.directory}/${forbidden}: is here`),
     ]);
   },
 );
@@ -57,7 +53,7 @@ Then(
           implementedBy(this.context, filesIn(this.context, group, services)),
         ).map(
           (port) =>
-            `${where(this.context, port)}: ${port.name.text} is implemented by no class in ${this.context.relative(group.directory)}/${services}`,
+            `${where(port)}: ${port.name} is implemented by no class in ${group.directory}/${services}`,
         ),
       ),
     );
@@ -71,19 +67,14 @@ Then(
       unimplemented(
         this.groups.flatMap((group) => contractsOf(this.context, group, [folder])),
         implementedBy(this.context, filesUnder(this.context, path)),
-      ).map(
-        (port) =>
-          `${where(this.context, port)}: ${port.name.text} is implemented by no class under ${path}`,
-      ),
+      ).map((port) => `${where(port)}: ${port.name} is implemented by no class under ${path}`),
     );
   },
 );
 
 /** The groups directly under a path, refusing a path with none, so a moved folder cannot pass vacuously. */
 function groupsUnder(context: AnalysisContext, path: string): readonly Block[] {
-  const under = context.blocks.filter(
-    (block) => posix.dirname(context.relative(block.directory)) === path,
-  );
+  const under = context.blocks.filter((block) => posix.dirname(block.directory) === path);
   refuseAny(under.length === 0 ? [`${path}: holds no groups`] : []);
 
   return under;
@@ -103,50 +94,54 @@ function contractsOf(
   context: AnalysisContext,
   group: Block,
   folders: readonly string[],
-): readonly ts.InterfaceDeclaration[] {
+): readonly Declaration[] {
   return folders
     .flatMap((folder) => filesIn(context, group, folder))
-    .flatMap((file) => file.statements.filter(ts.isInterfaceDeclaration))
-    .filter(isExported);
+    .flatMap((file) => declaredBy(context, file, "interface"))
+    .filter((declaration) => declaration.exported);
 }
 
-function filesIn(context: AnalysisContext, group: Block, folder: string): readonly ts.SourceFile[] {
+function filesIn(context: AnalysisContext, group: Block, folder: string): readonly CodeFile[] {
   const prefix = `${group.directory}/${folder}/`;
 
-  return context.filesOf(group).filter((file) => file.fileName.startsWith(prefix));
+  return context.filesOf(group).filter((file) => file.path.startsWith(prefix));
 }
 
-function filesUnder(context: AnalysisContext, path: string): readonly ts.SourceFile[] {
+function filesUnder(context: AnalysisContext, path: string): readonly CodeFile[] {
   const prefix = `${path}/`;
 
-  return context.sourceFiles.filter((file) => context.relative(file.fileName).startsWith(prefix));
+  return context.compiled.filter((file) => file.path.startsWith(prefix));
 }
 
-/** Every declaration named in the `implements` clause of a class declared in `files`. */
-function implementedBy(
+/** What a file declares at its top level of one kind, in the order written. */
+function declaredBy(
   context: AnalysisContext,
-  files: readonly ts.SourceFile[],
-): ReadonlySet<ts.Declaration> {
+  file: CodeFile,
+  kind: Declaration["kind"],
+): readonly Declaration[] {
+  return file.declares
+    .map((id) => context.declaration(id))
+    .filter((declaration) => declaration.kind === kind);
+}
+
+/** The ids of every declaration named in the `implements` clause of a class declared in `files`. */
+function implementedBy(context: AnalysisContext, files: readonly CodeFile[]): ReadonlySet<string> {
   return new Set(
     files
-      .flatMap((file) => file.statements.filter(ts.isClassDeclaration))
-      .flatMap((declaration) => declaration.heritageClauses ?? [])
-      .filter((clause) => clause.token === ts.SyntaxKind.ImplementsKeyword)
-      .flatMap((clause) => clause.types)
-      .flatMap((type) => declarationOf(context, type.expression) ?? []),
+      .flatMap((file) => declaredBy(context, file, "class"))
+      .flatMap((declaration) => declaration.implements)
+      .flatMap(({ target }) => target ?? []),
   );
 }
 
 /** The ports no class in `attached` implements. */
 function unimplemented(
-  ports: readonly ts.InterfaceDeclaration[],
-  attached: ReadonlySet<ts.Declaration>,
-): readonly ts.InterfaceDeclaration[] {
-  return ports.filter((port) => !attached.has(port));
+  ports: readonly Declaration[],
+  attached: ReadonlySet<string>,
+): readonly Declaration[] {
+  return ports.filter((port) => !attached.has(port.id));
 }
 
-function where(context: AnalysisContext, node: ts.Node): string {
-  const file = node.getSourceFile();
-
-  return `${context.relative(file.fileName)}:${String(lineAt(file, node.getStart()))}`;
+function where(declaration: Declaration): string {
+  return `${declaration.file}:${String(declaration.line)}`;
 }

@@ -45,8 +45,9 @@ Then add the two commands to the target's `package.json`:
   with `/map.json` and `/tests.json` behind it. Nothing is cached: every load reads the working
   tree as it is, runs the features and the rules again.
 - `hexagon-insight rules` runs the hexagon's rules (this package's `rules.feature`) over the target,
-  prints `progress` and `summary`, and exits non-zero when a rule breaks. A break is something to
-  look at, not a gate: keep it out of CI.
+  prints `progress` and `summary`, and exits 1 when a rule breaks, and 2 when the target cannot be
+  read at all (_Breaks and read failures_). A break is something to look at, not a gate: keep it
+  out of CI.
 
 ## The rules
 
@@ -58,34 +59,63 @@ not read:
 2. A supplier group has outgoing ports and no incoming ones, and each outgoing port is implemented by
    a class under `src/adapters`.
 3. Every outgoing adapter has a contract test, and every incoming adapter has an entry point test;
-   neither has the other kind. The lane decides: an adapter is incoming when it references an
-   incoming port, and outgoing otherwise.
+   an adapter on one side has no test of the other kind. The lane decides: an adapter is incoming
+   when it references an incoming port, and outgoing when it implements an outgoing port or
+   references no incoming one. An adapter that is both, such as a queue the hexagon writes to and
+   a consumer reads from, is drawn in both lanes and has both kinds.
 4. Every acceptance scenario under `features/` comes in through an incoming port, measured by
    running it.
+5. A target is laid out in the hexagon's folders: `src/infrastructure/staff`,
+   `src/infrastructure/suppliers`, `src/adapters` and `features/` are there; nothing sits directly
+   in `src` but `infrastructure`, `adapters` and `core`, nor in `src/infrastructure` but `staff`
+   and `suppliers`, unless the target's reader claims it for its language; and test code that uses
+   code under `src` lives in one of the four test folders.
+6. The core stands on nothing: no file under `src/core` uses the target's code outside it (a
+   package is its own business).
+
+## Breaks and read failures
+
+The tool is for repositories still finding the hexagon's shape, so a target that gets the shape
+wrong is still drawn and checked, and what is wrong is a **break**: a design flaw, named by a rule,
+shown on the page, and the reason `rules` exits 1. A missing folder, a folder the hexagon does not
+have, test code in the wrong place, code that does not compile: each is drawn as far as it can be,
+and the rules say what is wrong with it. Insight shows design; making the code work is the target's.
+
+A **read failure** is the other kind, and the only one that stops a run: the target cannot be read
+into a model at all, so there is nothing to draw or check. A root with no marker file or with both
+(_What the target provides_), or code the language's reader cannot load, is one. `rules` prints
+`insight: ` and why, and exits 2; the page shows the same message in place of the map.
 
 ## Kinds of test
 
-A test goes to its kind by what it fakes, and lives in that kind's folder at the target's root. The
-Tests view draws one lane per kind, in this order:
+A test goes to its kind by what it fakes, and lives in that kind's folder: `features/` at the
+target's root, and the other three under `tests/`. The Tests view draws one lane per kind, in this
+order:
 
-| Kind             | Drives                                         | Fakes                               | Lives in        |
-| ---------------- | ---------------------------------------------- | ----------------------------------- | --------------- |
-| Entry point test | an incoming adapter's outer surface            | the incoming port and all behind it | `entry-points/` |
-| Acceptance test  | an incoming port, and the hexagon              | a Test Double at each outgoing port | `features/`     |
-| Core test        | one piece of core logic                        | nothing                             | `core-tests/`   |
-| Contract test    | an outgoing adapter, against the real supplier | nothing                             | `contracts/`    |
+| Kind             | Drives                                         | Fakes                               | Lives in              |
+| ---------------- | ---------------------------------------------- | ----------------------------------- | --------------------- |
+| Entry point test | an incoming adapter's outer surface            | the incoming port and all behind it | `tests/entry-points/` |
+| Acceptance test  | an incoming port, and the hexagon              | a Test Double at each outgoing port | `features/`           |
+| Core test        | one piece of core logic                        | nothing                             | `tests/core/`         |
+| Contract test    | an outgoing adapter, against the real supplier | nothing                             | `tests/contracts/`    |
 
 `features/` is required. The other three are optional: a missing folder means that kind has no
-tests, and its lane says so ("No `entry-points/` folder.").
+tests, and its lane says so ("No `tests/entry-points/` folder.").
 
-A feature is tied to the adapter it tests by its steps file, paired with it by name
-(`contracts/support/crayo.steps.ts` with `contracts/crayo.feature`, and the same in
-`entry-points/`): the feature belongs to each adapter class that steps file constructs with `new`.
+A test is a feature or a plain test, and it is tied to each adapter it constructs:
+
+- A **feature** directly in the folder, by the steps file its reader pairs it with
+  (`tests/contracts/support/crayo.steps.ts` with `tests/contracts/crayo.feature` in a TypeScript
+  target): the feature belongs to each adapter class that steps file constructs.
+- A **plain test** is a file of test code in the folder, outside its `support/`, that is no
+  feature's steps and holds no Test Double, such as a C# test class or a `node:test` file: it
+  belongs to each adapter class it constructs.
 
 ## Test Doubles
 
-A **Test Double** is a class in a suite's support code (`features/support/`, `contracts/support/`,
-`entry-points/support/`, `core-tests/support/`) that implements a port, incoming or outgoing. It
+A **Test Double** is a class in a suite's support code (`features/support/`,
+`tests/contracts/support/`, `tests/entry-points/support/`, `tests/core/support/`) that implements a
+port, incoming or outgoing. It
 stands in for whatever is on the other side of that port: an acceptance test's doubles stand at the
 outgoing ports, an entry point test's double at the incoming port behind the adapter. So the tool
 finds a double by the port it implements, not by its name or its file. For now it finds only the
@@ -100,12 +130,52 @@ dependency run for real, and the Tests view draws it as real.
 
 ## What the target provides
 
+Insight tells the target's language by its root: `tsconfig.check.json` is TypeScript, and one
+`*.sln` or `*.slnx` is C#. A root with both, with neither, or with two solutions is refused with a
+message naming what it found.
+
+Every target provides:
+
+- `src/infrastructure/staff`, `src/infrastructure/suppliers` and `src/adapters`, one block per
+  folder under each. A core, if it has one, is `src/core`: the map draws a block for each of its
+  files, at any depth, since every file the staff stand on matters on its own, in a column of its
+  own between staff and suppliers. Nearly everything uses it, so its `uses` arrows, to the core
+  and out of it, are drawn only for the block clicked; one out of the core to the target's other
+  code is a break (rule 6). Nothing
+  else sits directly in `src` or `src/infrastructure` (rule 5) but what its language claims, below.
+- Its tests in the four folders above: `features/` always, and `tests/entry-points/`,
+  `tests/core/` and `tests/contracts/` when it has tests of those kinds. Test code that uses code
+  under `src` anywhere else is a break (rule 5).
+- `git`, to list every file, and Node with the package installed as above.
+
+Every file git lists has a home, code or not. A file in a group's or an adapter's folder is that
+block's, one in `src/core` the core's, and one in a test folder is on Tests. Every other file is
+on the map's strip of what belongs to no group, gathered by folder, test code outside the test
+folders included: `README.md`, `docs`, a `Dockerfile`, a tool. A strip block is sized like any
+other, a code file by its non-blank, non-comment lines and any other file by its non-blank lines,
+and lists the packages its code uses.
+
+A **TypeScript** target also provides:
+
 - `tsconfig.check.json` at its root: one TypeScript program over everything insight should read
   (`src` and the test folders).
-- `src/infrastructure/staff`, `src/infrastructure/suppliers` and `src/adapters`, one block per
-  folder under each, and `src/index.ts` as the composition root.
-- Its tests in the four folders above: `features/` always, and `entry-points/`, `core-tests/` and
-  `contracts/` when it has tests of those kinds.
+- `src/index.ts` as the composition root.
+- A file is test code when it imports a test runner (`@cucumber/cucumber`, `node:test`, `vitest`,
+  `jest`, `@jest/globals` or `mocha`).
 - A cucumber `default` profile running `features/**/*.feature`; insight runs each feature under it
   to measure doors.
-- `git`, to list the files outside the hexagon.
+
+A **C#** target also provides:
+
+- One solution at its root, `*.sln` or `*.slnx`. Insight reads every project it loads, and every
+  project those reference, through Roslyn, and restores the solution first (`dotnet restore`,
+  which writes each project's `obj/`, as a build does), so its packages must be restorable.
+- The .NET SDK 10 or later on the `PATH`. Insight builds its reader with it on first use, into the
+  system's temp folder.
+- The composition root is the project with `<OutputType>Exe</OutputType>` directly in `src`, such
+  as `src/App.Main`: its files are the composition roots, and its folder may sit beside the
+  hexagon's (rule 5).
+- A file is test code when its project is a test project: it says `<IsTestProject>`, or it
+  references the test SDK, Reqnroll, xUnit, NUnit or MSTest.
+- `node_modules` in its `.gitignore`, since it is a C# repository that now has one.
+- Insight does not measure the doors of a C# target yet, which the rules report as a break.

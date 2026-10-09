@@ -21,6 +21,7 @@
         --implements: #3f6fae;
         --references: #7f6cb3;
         --checked-by: #3f8f68;
+        --uses: #b0772a;
         --bad: #bf3b4e;
         --bad-tint: #fdf3f4;
         --radius: 14px;
@@ -137,8 +138,9 @@
         overflow: auto;
         min-height: 0;
       }
+      /* Both views fit their width and scroll only down (`columnGap`, `laneWidth`). */
       #map {
-        overflow: auto;
+        overflow: hidden auto;
         border-radius: var(--radius);
         background: var(--canvas);
         box-shadow:
@@ -399,7 +401,7 @@
         gap: 34px;
         align-items: start;
         padding: 30px 34px 40px;
-        overflow: auto;
+        overflow: hidden auto;
         border-radius: var(--radius);
         background: var(--canvas);
         box-shadow:
@@ -498,6 +500,11 @@
       .tblock.steps {
         background: #f2dfe2;
         border-color: #b1838a;
+      }
+      /* A test written as code is a plain card in the tests' hue, with no turned corner. */
+      .tblock.plain {
+        background: #f4fafa;
+        border-color: #6d9e97;
       }
       .tblock.double {
         background: #f3ecd9;
@@ -618,6 +625,9 @@
         stroke: var(--checked-by);
         stroke-dasharray: 1.5 4.5;
       }
+      .arrow.uses {
+        stroke: var(--uses);
+      }
     </style>
   </head>
   <body>
@@ -656,6 +666,7 @@
       const SVG_NS = "http://www.w3.org/2000/svg";
       const COLUMN_WIDTH = 196;
       const COLUMN_GAP = 96;
+      const MIN_COLUMN_GAP = 40;
       const MARGIN = 48;
       const BLOCK_GAP = 12;
       const MIN_HEIGHT = 40;
@@ -676,17 +687,20 @@
         staff: { fill: "#dfeadb", edge: "#7d9f74" },
         suppliers: { fill: "#f0e6d6", edge: "#b1976f" },
         "outgoing-adapters": { fill: "#e6e1f1", edge: "#8e82b4" },
+        core: { fill: "#f2dfe2", edge: "#b47d87" },
         outside: { fill: "#e6e8ec", edge: "#8e97a3" },
       };
 
       // One arrowhead per kind, in the kind's own colour, which is the colour the stylesheet gives
       // the line. `checked-by` is drawn as an open chevron rather than a solid head, so it reads
-      // apart from the other three at a glance as well as by its dotted line.
+      // apart from the others at a glance as well as by its dotted line. `uses` ends at or leaves the
+      // core, so nearly every block has one; only the clicked block's are drawn.
       const HEADS = {
         implements: { color: "#3f6fae", solid: true, word: "implements" },
         "depends-on": { color: "#6b7280", solid: true, word: "depends on" },
         references: { color: "#7f6cb3", solid: true, word: "references" },
         "checked-by": { color: "#3f8f68", solid: false, word: "is checked by" },
+        uses: { color: "#b0772a", solid: true, word: "uses (the core)" },
       };
 
       let map;
@@ -723,17 +737,54 @@
       // ---- Map -----------------------------------------------------------------------------------
 
       // `columnXs` is where each column starts, so no other maths has to know the widths.
-      function columnWidth() {
-        return COLUMN_WIDTH;
+      //
+      // A column is as wide as its longest word needs, and never narrower than `COLUMN_WIDTH`: a name
+      // wraps at its spaces and hyphens (`words`), but a word has nowhere to break, and a C# project
+      // is one long word (`CryptoTrader.Adapters.AspNetWebApi`). So the column grows to fit it, with
+      // the padding on both sides and the count in the corner, rather than the name running over.
+      function columnWidth(column) {
+        RULER.font = NAME_FONT;
+        const needs = column.blocks.flatMap((block) =>
+          words(block.name).map(
+            (word) =>
+              RULER.measureText(word).width +
+              PAD * 2 +
+              (block.externals.length === 0 ? 0 : PILL.width + 9),
+          ),
+        );
+        return Math.ceil(Math.max(COLUMN_WIDTH, ...needs));
       }
 
       function columnXs() {
-        return map.columns.map((column, index) => MARGIN + index * (COLUMN_WIDTH + COLUMN_GAP));
+        let x = MARGIN;
+        const gap = columnGap();
+        return map.columns.map((column) => {
+          const at = x;
+          x += columnWidth(column) + gap;
+          return at;
+        });
+      }
+
+      // The map fits the width it is given, so it never scrolls sideways: the gaps between the
+      // columns give up their room first, down to `MIN_COLUMN_GAP`, and a map still too wide after
+      // that is drawn smaller as a whole (`drawMap`). Scrolling down is fine; scrolling across is not.
+      function available() {
+        return document.getElementById("map").clientWidth;
+      }
+
+      function columnsWidth() {
+        return map.columns.reduce((sum, column) => sum + columnWidth(column), 0);
+      }
+
+      function columnGap() {
+        const gaps = Math.max(map.columns.length - 1, 0);
+        if (gaps === 0) return COLUMN_GAP;
+        const room = (available() - MARGIN * 2 - columnsWidth()) / gaps;
+        return Math.max(MIN_COLUMN_GAP, Math.min(COLUMN_GAP, room));
       }
 
       function mapWidth() {
-        const widths = map.columns.reduce((sum, column) => sum + columnWidth(column), 0);
-        return MARGIN * 2 + widths + Math.max(map.columns.length - 1, 0) * COLUMN_GAP;
+        return MARGIN * 2 + columnsWidth() + Math.max(map.columns.length - 1, 0) * columnGap();
       }
 
       // A block's area is drawn from its lines of code, so where the code is can be read off the map
@@ -769,7 +820,7 @@
           let y = MARGIN + (tallest - spans[index]) / 2;
           column.blocks.forEach((block) => {
             const height = heightOf(block, scale);
-            places.set(block.id, {
+            places.set(placeKey(column.lane, block.id), {
               x: xs[index],
               y,
               width: columnWidth(column),
@@ -782,19 +833,52 @@
         return MARGIN + tallest;
       }
 
-      // The row under the columns is the same idea lying down: each block is one row tall and as
-      // wide as its share of the row's lines of code, over a floor wide enough to read its name.
-      // Its blocks are in no column, so no arrow starts or ends at one.
-      function layoutStrip(places, top) {
-        const gaps = Math.max(map.strip.length - 1, 0) * BLOCK_GAP;
-        const floors = map.strip.length * STRIP_MIN_WIDTH;
-        const lines = map.strip.reduce((sum, block) => sum + block.linesOfCode, 0);
-        const spare = Math.max(mapWidth() - MARGIN * 2 - gaps - floors, 0);
-        let x = MARGIN;
+      // The row under the columns is the same idea lying down, and it wraps the way a flex row
+      // does: each block is one row tall and starts as wide as its longest word needs, never under
+      // `STRIP_MIN_WIDTH`; blocks fill a row up to the map's width, and the room a row has left is
+      // shared out by lines of code, so the heavier blocks on a row are the wider ones. A block too
+      // wide for a row of its own is cut to the row. Its blocks are in no column, so no arrow starts
+      // or ends at one.
+      function stripBasis(block) {
+        RULER.font = NAME_FONT;
+        const pill = block.externals.length === 0 ? 0 : PILL.width + 9;
+        const longest = Math.max(0, ...words(block.name).map((word) => RULER.measureText(word).width));
+        return Math.ceil(Math.max(STRIP_MIN_WIDTH, longest + PAD * 2 + pill));
+      }
+
+      function stripRows(width) {
+        const rows = [];
+        let row = [];
+        let used = 0;
         map.strip.forEach((block) => {
-          const width = STRIP_MIN_WIDTH + (spare * block.linesOfCode) / Math.max(lines, 1);
-          places.set(block.id, { x, y: top, width, height: STRIP_HEIGHT, column: -1 });
-          x += width + BLOCK_GAP;
+          const basis = Math.min(stripBasis(block), width);
+          const needs = row.length === 0 ? basis : used + BLOCK_GAP + basis;
+          if (row.length > 0 && needs > width) {
+            rows.push(row);
+            row = [];
+            used = basis;
+          } else {
+            used = needs;
+          }
+          row.push({ block, basis });
+        });
+        return row.length === 0 ? rows : [...rows, row];
+      }
+
+      function layoutStrip(places, top) {
+        const width = mapWidth() - MARGIN * 2;
+        stripRows(width).forEach((row, index) => {
+          const used = row.reduce((sum, { basis }) => sum + basis, 0) + (row.length - 1) * BLOCK_GAP;
+          const lines = row.reduce((sum, { block }) => sum + block.linesOfCode, 0);
+          const spare = Math.max(width - used, 0);
+          const y = top + index * (STRIP_HEIGHT + BLOCK_GAP);
+          let x = MARGIN;
+          row.forEach(({ block, basis }) => {
+            const share = lines === 0 ? spare / row.length : (spare * block.linesOfCode) / lines;
+            const grown = basis + share;
+            places.set(block.id, { x, y, width: grown, height: STRIP_HEIGHT, column: -1 });
+            x += grown + BLOCK_GAP;
+          });
         });
       }
 
@@ -813,14 +897,43 @@
         return other.column > place.column ? "right" : "left";
       }
 
+      // An adapter with two sides is in both adapter columns under one id (`lanesOf`), so its copy
+      // among the incoming adapters is placed under a key of its own. A `references` arrow, which is
+      // how it drives the hexagon, leaves that copy; every other arrow is the outgoing copy's.
+      function placeKey(lane, id) {
+        return lane === "incoming-adapters" && twoSided().has(id) ? `${id}@incoming` : id;
+      }
+
+      function twoSided() {
+        const idsIn = (lane) =>
+          (map.columns.find((column) => column.lane === lane)?.blocks ?? []).map((b) => b.id);
+        const outgoing = new Set(idsIn("outgoing-adapters"));
+        return new Set(idsIn("incoming-adapters").filter((id) => outgoing.has(id)));
+      }
+
+      function endKey(arrow, end, places) {
+        const incoming = `${arrow[end]}@incoming`;
+        return end === "from" && arrow.kind === "references" && places.has(incoming)
+          ? incoming
+          : arrow[end];
+      }
+
+      // An arrow is drawn when both its ends are on the map: a `checked-by` arrow ends at a contract
+      // test, which is on Tests.
+      function placed(arrows, places) {
+        return arrows.filter((arrow) => places.has(arrow.from) && places.has(arrow.to));
+      }
+
       function anchors(arrows, places) {
         const ends = new Map();
         const add = (key, entry) => ends.set(key, [...(ends.get(key) ?? []), entry]);
         arrows.forEach((arrow, index) => {
-          const from = places.get(arrow.from);
-          const to = places.get(arrow.to);
-          add(`${arrow.from} ${sideOf(from, to)}`, { index, end: "from", toward: to });
-          add(`${arrow.to} ${sideOf(to, from)}`, { index, end: "to", toward: from });
+          const fromKey = endKey(arrow, "from", places);
+          const toKey = endKey(arrow, "to", places);
+          const from = places.get(fromKey);
+          const to = places.get(toKey);
+          add(`${fromKey} ${sideOf(from, to)}`, { index, end: "from", toward: to });
+          add(`${toKey} ${sideOf(to, from)}`, { index, end: "to", toward: from });
         });
         const points = arrows.map(() => ({}));
         ends.forEach((entries, key) => {
@@ -1056,11 +1169,11 @@
       }
 
       // The row under the columns is the only thing on the map whose heading does not explain it, so
-      // it gets the sentence that does: these blocks are here because every tracked code file has to
+      // it gets the sentence that does: these blocks are here because every file git lists has to
       // land somewhere, which is what lets the map and Tests together be read as complete.
       const STRIP_NOTE =
-        "Every code file git tracks is in some block, here or on Tests. These belong to no group " +
-        "and are no test: the composition root, the configuration, the fixtures, and this tool.";
+        "Every file git lists is in some block, here or on Tests. These are in no group's folder, " +
+        "the core or a test folder: the composition root, configuration, docs, and tools.";
 
       function headings(root, stripTop) {
         const xs = columnXs();
@@ -1082,14 +1195,20 @@
 
       function drawMap() {
         const { places, stripTop } = layout();
-        const arrows = shownArrows();
+        const arrows = placed(shownArrows(), places);
         const lit = litBlocks(arrows);
         const points = anchors(arrows, places);
         const broken = brokenIds();
         const edge = edgeOf(places);
+        // Drawn at its own size, and shrunk as a whole when even the narrowest gaps leave it wider
+        // than the panel (`columnGap`), so it never scrolls sideways.
+        const width = Math.max(mapWidth(), edge.right + MARGIN);
+        const height = edge.bottom + MARGIN;
+        const shrink = Math.min(1, available() / width);
         const root = svg("svg", {
-          width: Math.max(mapWidth(), edge.right + MARGIN),
-          height: edge.bottom + MARGIN,
+          width: Math.floor(width * shrink),
+          height: Math.ceil(height * shrink),
+          viewBox: `0 0 ${width} ${height}`,
         });
         root.append(svg("defs", {}, ...Object.keys(HEADS).map((kind) => marker(kind, "head"))));
         headings(root, stripTop);
@@ -1107,7 +1226,7 @@
         );
         [...drawn, ...map.strip.map((block) => ({ block, lane: "outside" }))].forEach(
           ({ block, lane }) => {
-            const place = places.get(block.id);
+            const place = places.get(placeKey(lane, block.id));
             root.append(blockNode(block, lane, place, broken.has(block.id), lit.has(block.id)));
           },
         );
@@ -1241,7 +1360,10 @@
       // a block is what the block leans on outside this repository. That is answered here, on
       // selection, rather than in a panel that is always open and always mostly irrelevant.
       function blockAt(id) {
-        const drawn = [...map.columns.flatMap((column) => column.blocks), ...map.strip];
+        const drawn = [
+          ...map.columns.flatMap((column) => column.blocks),
+          ...map.strip,
+        ];
         return drawn.find((block) => block.id === id);
       }
 
@@ -1342,7 +1464,9 @@
       }
 
       function isEmpty(lane) {
-        return lane.features.length + lane.doubles.length + lane.support.length === 0;
+        return (
+          lane.features.length + lane.tests.length + lane.doubles.length + lane.support.length === 0
+        );
       }
 
       // Every block the view draws, flat, each with the style it is drawn in and the file it is
@@ -1350,6 +1474,7 @@
       function testEntries() {
         const lanes = (tests?.lanes ?? []).flatMap((lane) => [
           ...lane.features.flatMap((feature) => featureEntries(lane, feature)),
+          ...lane.tests.map(plainEntry),
           ...lane.doubles.map((double) => ({ style: "double", file: double.file, block: double })),
           ...lane.support.map((file) => ({
             style: file.real ? "support real" : "support",
@@ -1373,6 +1498,12 @@
         const own = { style, file: feature.id, block: feature };
         if (!feature.steps) return [own];
         return [own, { style: "steps", file: feature.steps.id, block: feature.steps }];
+      }
+
+      // A test written as code rather than Gherkin, such as a C# test class: it names the adapters
+      // it builds, as a contract steps file does.
+      function plainEntry(test) {
+        return { style: "plain", file: test.id, block: test };
       }
 
       function testEntryAt(id) {
@@ -1403,7 +1534,7 @@
         const features = lane.features.map((one) =>
           Math.max(one.linesOfCode, one.steps?.linesOfCode ?? 0),
         );
-        const rest = [...lane.doubles, ...lane.support].map((one) => one.linesOfCode);
+        const rest = [...lane.tests, ...lane.doubles, ...lane.support].map((one) => one.linesOfCode);
         return {
           lines: [...features, ...rest].reduce((sum, n) => sum + n, 0),
           count: features.length + rest.length,
@@ -1521,15 +1652,16 @@
           { class: "lane" },
           ...head,
           ...featureNodes(lane, draw),
+          ...lane.tests.map((test) => draw(plainEntry(test))),
           ...laneBoxes(lane, draw),
         );
       }
 
+      // Shares of the width, with no floor, so the lanes fit the view and it never scrolls sideways;
+      // a lane's names wrap within it instead.
       function laneWidth(lane) {
-        if (isEmpty(lane)) return "minmax(170px, 0.7fr)";
-        return lane.features.some((one) => one.steps)
-          ? "minmax(420px, 2fr)"
-          : "minmax(280px, 1.3fr)";
+        if (isEmpty(lane)) return "minmax(0, 0.7fr)";
+        return lane.features.some((one) => one.steps) ? "minmax(0, 2fr)" : "minmax(0, 1.3fr)";
       }
 
       function drawTests() {
@@ -1586,6 +1718,7 @@
             keyRow(tsample("acceptance"), "acceptance feature"),
             keyRow(tsample("contract"), "contract feature"),
             keyRow(tsample("steps"), "contract steps — names the adapter it builds"),
+            keyRow(tsample("plain"), "test written as code — names the adapters it builds"),
           ]),
           group(doubleRows()),
           group([
