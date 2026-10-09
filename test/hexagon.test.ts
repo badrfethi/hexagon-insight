@@ -12,7 +12,8 @@ import { readModel } from "../readers/read.js";
  * The hexagon part over a model written by hand (`fixture/model.json`), with no reader and no
  * language: a staff group with an incoming port and the service behind it, a supplier group with an
  * outgoing port, an outgoing adapter with its contract test, an incoming adapter with no entry point
- * test, an acceptance suite with a Test Double and a real support class, and a file only that suite
+ * test, an adapter on both sides with a plain test of each kind,
+ * an acceptance suite with a Test Double and a real support class, and a file only that suite
  * imports. What a reader must report is in `analysis/model.ts`; this is what the map, Tests and the
  * rules make of it.
  */
@@ -30,7 +31,10 @@ test("the map draws each block in its lane, sized and with its externals", () =>
     {
       lane: "incoming-adapters",
       title: "Incoming adapters",
-      blocks: [block("adapters/web-api", "adapters", 30, ["node:http", "zod"])],
+      blocks: [
+        block("adapters/order-queue", "adapters", 18, []),
+        block("adapters/web-api", "adapters", 30, ["node:http", "zod"]),
+      ],
     },
     {
       lane: "staff",
@@ -45,7 +49,10 @@ test("the map draws each block in its lane, sized and with its externals", () =>
     {
       lane: "outgoing-adapters",
       title: "Outgoing adapters",
-      blocks: [block("adapters/simulated-exchange", "adapters", 20, ["node:crypto"])],
+      blocks: [
+        block("adapters/simulated-exchange", "adapters", 20, ["node:crypto"]),
+        block("adapters/order-queue", "adapters", 18, []),
+      ],
     },
   ]);
 });
@@ -63,8 +70,11 @@ test("the strip holds the code that is in no group and on no test", () => {
   ]);
 });
 
-test("a src/core is one block under staff and suppliers, out of the strip and in no arrow", async () => {
-  assert.equal("core" in map, false);
+test("a src/core is one block in a column between staff and suppliers, out of the strip and in no arrow", async () => {
+  assert.equal(
+    map.columns.some(({ lane }) => lane === "core"),
+    false,
+  );
 
   const model = await readModel(FIXTURE);
   const withCore = await mapOf(
@@ -93,12 +103,16 @@ test("a src/core is one block under staff and suppliers, out of the strip and in
     FIXTURE,
   );
 
-  assert.deepEqual(withCore.core, {
-    id: "core",
-    name: "core",
-    column: "core",
-    linesOfCode: 12,
-    externals: ["decimal.js"],
+  assert.deepEqual(
+    withCore.columns.map(({ lane }) => lane),
+    ["incoming-adapters", "staff", "core", "suppliers", "outgoing-adapters"],
+  );
+  assert.deepEqual(withCore.columns[2], {
+    lane: "core",
+    title: "Core",
+    blocks: [
+      { id: "core", name: "core", column: "core", linesOfCode: 12, externals: ["decimal.js"] },
+    ],
   });
   assert.deepEqual(withCore.strip, map.strip);
   assert.deepEqual(withCore.arrows, map.arrows);
@@ -106,6 +120,7 @@ test("a src/core is one block under staff and suppliers, out of the strip and in
 
 test("the arrows come from what each block imports, takes, constructs and is checked by", () => {
   assert.deepEqual(map.arrows, [
+    { from: "adapters/order-queue", to: "infrastructure/staff/orders", kind: "references" },
     { from: "adapters/web-api", to: "infrastructure/staff/orders", kind: "references" },
     {
       from: "infrastructure/staff/orders",
@@ -117,7 +132,21 @@ test("the arrows come from what each block imports, takes, constructs and is che
       to: "infrastructure/suppliers/exchange",
       kind: "implements",
     },
-    { from: "adapters/simulated-exchange", to: "contracts/exchange.feature", kind: "checked-by" },
+    {
+      from: "adapters/order-queue",
+      to: "infrastructure/suppliers/exchange",
+      kind: "implements",
+    },
+    {
+      from: "adapters/simulated-exchange",
+      to: "tests/contracts/exchange.feature",
+      kind: "checked-by",
+    },
+    {
+      from: "adapters/order-queue",
+      to: "tests/contracts/OrderQueueTests.ts",
+      kind: "checked-by",
+    },
   ]);
 });
 
@@ -127,8 +156,8 @@ test("the rules break for the missing entry point test, and for doors no reader 
       rule: ADAPTER_RULE,
       file: "src/adapters/web-api",
       message:
-        "every incoming adapter has an entry point test: is an incoming adapter, and no feature " +
-        "under entry-points runs it",
+        "every incoming adapter has an entry point test: is an incoming adapter, and no test " +
+        "under tests/entry-points runs it",
       blocks: ["adapters/web-api"],
       view: "tests",
     },
@@ -152,13 +181,22 @@ test("Tests draws a lane per kind, with its features, doubles and support", () =
   assert.deepEqual(
     view.lanes.map(({ kind, reason }) => ({ kind, reason })),
     [
-      { kind: "Entry point test", reason: "No `entry-points/` folder." },
+      { kind: "Entry point test", reason: null },
       { kind: "Acceptance test", reason: null },
-      { kind: "Core test", reason: "No `core-tests/` folder." },
+      { kind: "Core test", reason: "No `tests/core/` folder." },
       { kind: "Contract test", reason: null },
     ],
   );
-  assert.deepEqual([entryPoints?.features, core?.features], [[], []]);
+  assert.deepEqual([entryPoints?.features, core?.features, core?.tests], [[], [], []]);
+  assert.deepEqual(entryPoints?.tests, [
+    {
+      id: "tests/entry-points/OrderQueueEntryTests.ts",
+      name: "OrderQueueEntryTests.ts",
+      linesOfCode: 8,
+      adapters: [{ name: "OrderQueue", block: "adapters/order-queue", ports: ["IExchange"] }],
+    },
+  ]);
+  assert.deepEqual(acceptance?.tests, []);
 
   assert.deepEqual(
     acceptance?.features.map(({ id, name, linesOfCode, scenarios, steps }) => ({
@@ -196,13 +234,13 @@ test("Tests draws a lane per kind, with its features, doubles and support", () =
 
   assert.deepEqual(contracts?.features, [
     {
-      id: "contracts/exchange.feature",
+      id: "tests/contracts/exchange.feature",
       name: "The exchange",
       linesOfCode: 4,
       scenarios: 1,
       scenarioNames: ["An order is filled"],
       steps: {
-        id: "contracts/support/exchange.steps.ts",
+        id: "tests/contracts/support/exchange.steps.ts",
         name: "exchange.steps.ts",
         linesOfCode: 10,
         adapters: [
@@ -213,6 +251,14 @@ test("Tests draws a lane per kind, with its features, doubles and support", () =
           },
         ],
       },
+    },
+  ]);
+  assert.deepEqual(contracts?.tests, [
+    {
+      id: "tests/contracts/OrderQueueTests.ts",
+      name: "OrderQueueTests.ts",
+      linesOfCode: 9,
+      adapters: [{ name: "OrderQueue", block: "adapters/order-queue", ports: ["IExchange"] }],
     },
   ]);
   assert.deepEqual(contracts?.support, []);

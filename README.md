@@ -59,8 +59,10 @@ not read:
 2. A supplier group has outgoing ports and no incoming ones, and each outgoing port is implemented by
    a class under `src/adapters`.
 3. Every outgoing adapter has a contract test, and every incoming adapter has an entry point test;
-   neither has the other kind. The lane decides: an adapter is incoming when it references an
-   incoming port, and outgoing otherwise.
+   an adapter on one side has no test of the other kind. The lane decides: an adapter is incoming
+   when it references an incoming port, and outgoing when it implements an outgoing port or
+   references no incoming one. An adapter that is both, such as a queue the hexagon writes to and
+   a consumer reads from, is drawn in both lanes and has both kinds.
 4. Every acceptance scenario under `features/` comes in through an incoming port, measured by
    running it.
 5. A target is laid out in the hexagon's folders: `src/infrastructure/staff`,
@@ -84,27 +86,34 @@ into a model at all, so there is nothing to draw or check. A root with no marker
 
 ## Kinds of test
 
-A test goes to its kind by what it fakes, and lives in that kind's folder at the target's root. The
-Tests view draws one lane per kind, in this order:
+A test goes to its kind by what it fakes, and lives in that kind's folder: `features/` at the
+target's root, and the other three under `tests/`. The Tests view draws one lane per kind, in this
+order:
 
-| Kind             | Drives                                         | Fakes                               | Lives in        |
-| ---------------- | ---------------------------------------------- | ----------------------------------- | --------------- |
-| Entry point test | an incoming adapter's outer surface            | the incoming port and all behind it | `entry-points/` |
-| Acceptance test  | an incoming port, and the hexagon              | a Test Double at each outgoing port | `features/`     |
-| Core test        | one piece of core logic                        | nothing                             | `core-tests/`   |
-| Contract test    | an outgoing adapter, against the real supplier | nothing                             | `contracts/`    |
+| Kind             | Drives                                         | Fakes                               | Lives in              |
+| ---------------- | ---------------------------------------------- | ----------------------------------- | --------------------- |
+| Entry point test | an incoming adapter's outer surface            | the incoming port and all behind it | `tests/entry-points/` |
+| Acceptance test  | an incoming port, and the hexagon              | a Test Double at each outgoing port | `features/`           |
+| Core test        | one piece of core logic                        | nothing                             | `tests/core/`         |
+| Contract test    | an outgoing adapter, against the real supplier | nothing                             | `tests/contracts/`    |
 
 `features/` is required. The other three are optional: a missing folder means that kind has no
-tests, and its lane says so ("No `entry-points/` folder.").
+tests, and its lane says so ("No `tests/entry-points/` folder.").
 
-A feature is tied to the adapter it tests by its steps file, paired with it by name
-(`contracts/support/crayo.steps.ts` with `contracts/crayo.feature`, and the same in
-`entry-points/`): the feature belongs to each adapter class that steps file constructs with `new`.
+A test is a feature or a plain test, and it is tied to each adapter it constructs:
+
+- A **feature** directly in the folder, by the steps file its reader pairs it with
+  (`tests/contracts/support/crayo.steps.ts` with `tests/contracts/crayo.feature` in a TypeScript
+  target): the feature belongs to each adapter class that steps file constructs.
+- A **plain test** is a file of test code in the folder, outside its `support/`, that is no
+  feature's steps and holds no Test Double, such as a C# test class or a `node:test` file: it
+  belongs to each adapter class it constructs.
 
 ## Test Doubles
 
-A **Test Double** is a class in a suite's support code (`features/support/`, `contracts/support/`,
-`entry-points/support/`, `core-tests/support/`) that implements a port, incoming or outgoing. It
+A **Test Double** is a class in a suite's support code (`features/support/`,
+`tests/contracts/support/`, `tests/entry-points/support/`, `tests/core/support/`) that implements a
+port, incoming or outgoing. It
 stands in for whatever is on the other side of that port: an acceptance test's doubles stand at the
 outgoing ports, an entry point test's double at the incoming port behind the adapter. So the tool
 finds a double by the port it implements, not by its name or its file. For now it finds only the
@@ -127,12 +136,13 @@ Every target provides:
 
 - `src/infrastructure/staff`, `src/infrastructure/suppliers` and `src/adapters`, one block per
   folder under each. A core, if it has one, is `src/core`: the map draws it as one block, however
-  it is split inside, in a band under the staff and supplier columns, with no arrows to it, since
-  nearly everything uses it. Nothing else sits directly in `src` or
+  it is split inside, in a column of its own between staff and suppliers, with no arrows to it,
+  since nearly everything uses it. Nothing else sits directly in `src` or
   `src/infrastructure` (rule 5) but what its language claims, below.
-- Its tests in the four folders above: `features/` always, and `entry-points/`, `core-tests/` and
-  `contracts/` when it has tests of those kinds. Test code that uses code under `src` anywhere
-  else is a break (rule 5).
+- Its tests in the four folders above: `features/` always, and `tests/entry-points/`,
+  `tests/core/` and `tests/contracts/` when it has tests of those kinds. Test code that uses code
+  under `src` anywhere else is a break (rule 5). Test code is drawn on Tests, never on the map's
+  strip of code outside the groups.
 - `git`, to list the files outside the hexagon, and Node with the package installed as above.
 
 A **TypeScript** target also provides:

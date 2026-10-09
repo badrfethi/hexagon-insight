@@ -23,7 +23,7 @@ step runs.
 
 **Steps read the analysis, never a second parse.** Each `Given` awaits `this.read()` in `world.ts`,
 which reads the target's model once per run (`../readers/read.ts`) and builds the shared
-`AnalysisContext` over it; steps then reuse what the map uses (`laneOf`, `featuresRunning`, the
+`AnalysisContext` over it; steps then reuse what the map uses (`lanesOf`, `testsRunning`, the
 model's `doors`), so a rule and the page cannot disagree about the same code. Like `../analysis/`,
 they import no compiler and no reader but `read.ts`.
 

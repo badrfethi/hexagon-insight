@@ -1,21 +1,20 @@
 import { type Arrow, arrowsOf, incomingPortGroupsOf } from "./arrows.js";
 import type { Block, Column } from "./blocks.js";
 import { type Break, breaksOf } from "./breaks.js";
-import type { AnalysisContext } from "./context.js";
+import { type AnalysisContext, inFolder } from "./context.js";
 import type { CodeFile } from "./model.js";
 import type { OutsideBlock } from "./outside.js";
 
 /** The map itself, computed from the working tree for one load, and drawn as soon as it answers. */
 export interface InsightMap {
-  /** Left to right, and only those that hold a block. */
+  /**
+   * Left to right, and only those that hold a block. The core, when the target has a `src/core`, is
+   * a column of its one block between staff and suppliers (`coreOf`), so a map without one is the
+   * map it was before the core was drawn.
+   */
   readonly columns: readonly MapColumn[];
   /** The row under the columns: the code that belongs to no group and is not a test (`outside.ts`). */
   readonly strip: readonly BlockView[];
-  /**
-   * The core, drawn as a band under staff and suppliers; absent, not empty, for a target without a
-   * `src/core`, so a map without one is the map it was before the core was drawn (`coreOf`).
-   */
-  readonly core?: BlockView;
   /** Drawn only for a clicked block. */
   readonly arrows: readonly Arrow[];
   /**
@@ -33,7 +32,8 @@ export interface InsightMap {
  * the hexagon is an incoming port, which belongs to staff — so there is no incoming supplier lane.
  * An adapter is incoming when it references an interface in a group's `incoming_ports/`, which is
  * how it drives the hexagon (`arrows.ts`); every other adapter is outgoing, including one that
- * implements no port but serves outgoing adapters, such as `process-runner`.
+ * implements no port but serves outgoing adapters, such as `process-runner`. An adapter that is
+ * incoming and implements an outgoing port as well is in both lanes (`lanesOf`).
  */
 export type Lane =
   | "incoming-adapters"
@@ -65,10 +65,15 @@ export interface BlockView {
   readonly externals: readonly string[];
 }
 
-/** The group columns, which are cut out of `context.blocks`. */
+/**
+ * The columns, which are cut out of `context.blocks` and the core. The core sits between staff and
+ * suppliers: the staff stand on it, and it stands on nothing, so nothing is drawn beyond it but the
+ * suppliers' ports and what implements them.
+ */
 const LANES: readonly { readonly lane: Lane; readonly title: string }[] = [
   { lane: "incoming-adapters", title: "Incoming adapters" },
   { lane: "staff", title: "Staff" },
+  { lane: "core", title: "Core" },
   { lane: "suppliers", title: "Suppliers" },
   { lane: "outgoing-adapters", title: "Outgoing adapters" },
 ];
@@ -83,35 +88,69 @@ export async function mapOf(context: AnalysisContext, root: string): Promise<Ins
   return {
     columns: columnsOf(context),
     strip: context.outside.map((block) => outsideViewOf(context, block)),
-    ...(context.core === undefined ? {} : { core: coreViewOf(context, context.core) }),
     arrows: arrowsOf(context),
     breaks,
   };
 }
 
 function columnsOf(context: AnalysisContext): readonly MapColumn[] {
-  const lanes = new Map(context.blocks.map((block) => [block, laneOf(context, block)] as const));
+  const lanes = new Map(context.blocks.map((block) => [block, lanesOf(context, block)] as const));
+
+  const core = context.core === undefined ? [] : [coreViewOf(context, context.core)];
 
   return LANES.map(({ lane, title }) => ({
     lane,
     title,
-    blocks: context.blocks
-      .filter((block) => lanes.get(block) === lane)
-      .map((block) => viewOf(context, block)),
+    blocks:
+      lane === "core"
+        ? core
+        : context.blocks
+            .filter((block) => lanes.get(block)?.includes(lane) === true)
+            .map((block) => viewOf(context, block)),
   })).filter((column) => column.blocks.length > 0);
 }
 
-const LANE_OF: Readonly<Record<Column, (context: AnalysisContext, block: Block) => Lane>> = {
-  staff: () => "staff",
-  suppliers: () => "suppliers",
-  adapters: (context, block) =>
-    incomingPortGroupsOf(context, block).length > 0 ? "incoming-adapters" : "outgoing-adapters",
-  core: () => "core",
-  outside: () => "outside",
+const LANES_OF: Readonly<
+  Record<Column, (context: AnalysisContext, block: Block) => readonly Lane[]>
+> = {
+  staff: () => ["staff"],
+  suppliers: () => ["suppliers"],
+  adapters: adapterLanes,
+  core: () => ["core"],
+  outside: () => ["outside"],
 };
 
-export function laneOf(context: AnalysisContext, block: Block): Lane {
-  return LANE_OF[block.column](context, block);
+/**
+ * The lanes a block is drawn in: one, except for an adapter with two sides (`rules.feature`,
+ * Rule 3). An adapter is incoming when it references an incoming port, and outgoing when a class
+ * of it implements an outgoing port, or when it references no incoming port, so an adapter that
+ * serves other outgoing adapters is outgoing. One that drives an incoming port and implements an
+ * outgoing one, such as a queue the hexagon writes to and a consumer reads from, is both, and is
+ * drawn in both lanes under the same id.
+ */
+export function lanesOf(context: AnalysisContext, block: Block): readonly Lane[] {
+  return LANES_OF[block.column](context, block);
+}
+
+function adapterLanes(context: AnalysisContext, block: Block): readonly Lane[] {
+  const incoming = incomingPortGroupsOf(context, block).length > 0;
+  const outgoing = !incoming || implementsOutgoingPort(context, block);
+
+  return [
+    ...(incoming ? (["incoming-adapters"] as const) : []),
+    ...(outgoing ? (["outgoing-adapters"] as const) : []),
+  ];
+}
+
+function implementsOutgoingPort(context: AnalysisContext, block: Block): boolean {
+  return context
+    .filesOf(block)
+    .flatMap((file) => file.declares)
+    .flatMap((id) => context.declaration(id).implements)
+    .some(
+      ({ target }) =>
+        target !== undefined && inFolder(context.declaration(target).file, "outgoing_ports"),
+    );
 }
 
 function viewOf(context: AnalysisContext, block: Block): BlockView {

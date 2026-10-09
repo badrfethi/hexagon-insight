@@ -32,13 +32,15 @@ export interface Layout {
   readonly features: readonly FeatureText[];
   /**
    * The folders directly in `src` and in `src/infrastructure`, which the layout rule holds to the
-   * hexagon's own names (`rules.feature`, Rule 5). A path that is not there lists no folders.
+   * hexagon's own names (`rules.feature`, Rule 5), and directly in `tests`, which says which of the
+   * code-first kinds of test a target has (`test-kinds.ts`). A path that is not there lists no
+   * folders.
    */
   readonly folders: readonly FolderListing[];
 }
 
 export interface FolderListing {
-  /** `src` or `src/infrastructure`. */
+  /** `src`, `src/infrastructure` or `tests`. */
   readonly path: string;
   /** The names of the folders directly in it, sorted; files are not listed. */
   readonly folders: readonly string[];
@@ -52,7 +54,7 @@ export interface GroupFolder {
 }
 
 export interface FeatureText {
-  /** Such as `contracts/crayo.feature`. */
+  /** Such as `tests/contracts/crayo.feature`. */
   readonly path: string;
   /** The Gherkin, which the hexagon part parses itself. */
   readonly text: string;

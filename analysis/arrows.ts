@@ -1,6 +1,6 @@
 import type { Block } from "./blocks.js";
 import { type AnalysisContext, inFolder } from "./context.js";
-import { contractFeaturesOf } from "./contracts.js";
+import { contractTestsOf } from "./contracts.js";
 import type { Declaration } from "./model.js";
 
 /**
@@ -14,10 +14,10 @@ import type { Declaration } from "./model.js";
  * - `references` — an adapter imports an interface from `to`'s `incoming_ports/`. An incoming
  *   adapter drives the hexagon through such a port rather than implementing it, and may reference
  *   several, in staff or in suppliers. It replaces a `depends-on` arrow between the same two blocks.
- * - `checked-by` — an adapter is stood in front of its real supplier by a feature in `contracts/`
- *   (ADR-0019), which is a block in the rightmost column. The feature belongs to the adapter its
- *   steps file constructs (`contracts.ts`), so `contracts/anthropic.feature` draws two of these, one
- *   to each Claude adapter. It is the only arrow that ends outside `src/`.
+ * - `checked-by` — an adapter is stood in front of its real supplier by a contract test in
+ *   `tests/contracts/` (ADR-0019), a feature or a plain test. The test belongs to the adapter it
+ *   constructs (`contracts.ts`), so `tests/contracts/anthropic.feature` draws two of these, one to
+ *   each Claude adapter. It is the only arrow that ends outside `src/`.
  *
  * Raw imports are otherwise not arrows.
  */
@@ -45,12 +45,12 @@ export function arrowsOf(context: AnalysisContext): Arrow[] {
   return unique([...references, ...dependencies, ...implementations(context), ...checks(context)]);
 }
 
-/** Each block to the contract features that check it — the outgoing adapters, in practice. */
+/** Each block to the contract tests that check it — the outgoing adapters, in practice. */
 function checks(context: AnalysisContext): Arrow[] {
   return context.blocks.flatMap((block) =>
-    contractFeaturesOf(context, block).map((feature) => ({
+    contractTestsOf(context, block).map((test) => ({
       from: block.id,
-      to: feature.path,
+      to: test,
       kind: "checked-by" as const,
     })),
   );

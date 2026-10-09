@@ -19,8 +19,8 @@ export interface AnalysisContext {
   /** The block of `src/core`, when there is one (`coreOf`): not in `blocks`, and not outside. */
   readonly core: Block | undefined;
   /**
-   * The catch-all blocks under the columns: every code file that belongs to no group and is not a
-   * test, gathered by folder (`outside.ts`). They are kept apart from `blocks` because they are not
+   * The catch-all blocks under the columns: every code file that belongs to no group and is neither
+   * in a test folder nor test code (`CodeFile.test`), gathered by folder (`outside.ts`). They are kept apart from `blocks` because they are not
    * groups: the rules are not asked of them and no arrow starts or ends at one.
    */
   readonly outside: readonly OutsideBlock[];
@@ -64,10 +64,13 @@ export function contextOf(model: Model): AnalysisContext {
   const cache = new Map<string, unknown>();
   const blockOf = (path: string): Block | undefined =>
     blocks.find((block) => path.startsWith(`${block.directory}/`));
-  const tests = testKinds(model.rootEntries).map(({ folder }) => folder);
+  const tests = testKinds(model).map(({ folder }) => folder);
   const sharedTests = sharedTestFiles(compiled, tests);
   const core = coreOf(model.folders.find(({ path }) => path === "src")?.folders ?? []);
-  const outside = outsideBlocks(listed, core === undefined ? blocks : [...blocks, core], [
+  // Test code is the Tests view's, never the map's: where it sits outside a test folder, the layout
+  // rule names it (`rules.feature`, Rule 5).
+  const product = listed.filter((path) => files.get(path)?.test !== true);
+  const outside = outsideBlocks(product, core === undefined ? blocks : [...blocks, core], [
     ...tests.map((folder) => `${folder}/`),
     ...sharedTests.map(({ path }) => path),
   ]);

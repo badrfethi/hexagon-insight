@@ -41,8 +41,8 @@ So the concepts the analysis rests on are stated here, not borrowed from a targe
 
 - **The rules** are this repo's root `rules.feature`, run by `hexagon-insight rules` and by the page.
   A target's own `rules.feature` is not read.
-- **The four kinds of test and their folders** (`entry-points/`, `features/`, `core-tests/`,
-  `contracts/`) are stated in `analysis/test-kinds.ts` and `README.md`. Nothing reads a target's
+- **The four kinds of test and their folders** (`tests/entry-points/`, `features/`,
+  `tests/core/`, `tests/contracts/`) are stated in `analysis/test-kinds.ts` and `README.md`. Nothing reads a target's
   ADRs.
 - **A Test Double** is a class in a suite's support code that implements a port, incoming or
   outgoing; its kinds are Meszaros's (Dummy, Stub, Spy, Mock, Fake), named in the first sentence of

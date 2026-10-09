@@ -13,7 +13,8 @@ import { testKinds } from "./test-kinds.js";
  * is in them, the code for the doubles and what each steps file builds — and nothing is run, so it
  * answers without waiting on the rules or on a feature. Every code file in a lane's folder is drawn
  * exactly once: a `.feature` as a feature, a steps file beside its feature, a file of Test Doubles
- * as its doubles, and everything else in the box of what runs in every test of the kind. What the
+ * as its doubles, a plain test as a test, and everything else in the box of what runs in every test
+ * of the kind. What the
  * suites share and nothing else imports is drawn once, under the lanes (`shared-tests.ts`).
  */
 export interface TestsView {
@@ -40,13 +41,15 @@ export interface TestLane {
   /** Why it has no tests (`test-kinds.ts`); the page shows it only for a lane with nothing in it. */
   readonly reason: string | null;
   readonly features: readonly TestFeature[];
+  /** The plain tests, in path order (`PlainTest`). */
+  readonly tests: readonly PlainTest[];
   readonly doubles: readonly TestDouble[];
   readonly support: readonly SupportFile[];
 }
 
 /** A `.feature` file, sized and counted as the Map sizes and counts one. */
 export interface TestFeature {
-  /** Relative to the root, such as `contracts/crayo.feature`. */
+  /** Relative to the root, such as `tests/contracts/crayo.feature`. */
   readonly id: string;
   /** Its `Feature:` title. */
   readonly name: string;
@@ -67,6 +70,20 @@ export interface StepsFile {
   readonly adapters: readonly ConstructedAdapter[];
 }
 
+/**
+ * A file of test code in a lane's folder, outside its `support/`, that is no feature's steps and
+ * holds no Test Double: a test written as code rather than Gherkin (`rules.feature`, Rule 3), such
+ * as a C# test class. What it constructs, it tests (`contracts.ts`).
+ */
+export interface PlainTest {
+  readonly id: string;
+  /** Relative to the lane's folder, such as `Binance/BinanceContractTests.cs`. */
+  readonly name: string;
+  readonly linesOfCode: number;
+  /** The adapters it builds, which it checks; empty for a test of no adapter, such as a core test. */
+  readonly adapters: readonly ConstructedAdapter[];
+}
+
 /** A support file that is not a feature's own steps and holds no Test Double. */
 export interface SupportFile {
   readonly id: string;
@@ -78,7 +95,7 @@ export interface SupportFile {
 }
 
 export function testsView(context: AnalysisContext): TestsView {
-  const kinds = testKinds(context.model.rootEntries);
+  const kinds = testKinds(context.model);
 
   return {
     lanes: kinds.map((kind) => ({
@@ -94,7 +111,7 @@ export function testsView(context: AnalysisContext): TestsView {
   };
 }
 
-type Contents = Pick<TestLane, "features" | "doubles" | "support">;
+type Contents = Pick<TestLane, "features" | "tests" | "doubles" | "support">;
 
 function contentsOf(context: AnalysisContext, folder: string, files: readonly string[]): Contents {
   const own = files.filter((path) => path.startsWith(`${folder}/`));
@@ -107,10 +124,20 @@ function contentsOf(context: AnalysisContext, folder: string, files: readonly st
   const paired = new Set(steps.values());
   const scripts = own.flatMap((path) => context.fileAt(path) ?? []);
   const doubles = doublesIn(context, scripts);
-  const held = new Set([...featurePaths, ...paired, ...doubles.map((double) => double.file)]);
+  const doubled = new Set(doubles.map((double) => double.file));
+  const stepsFiles = new Set(context.model.steps.map((pair) => pair.steps));
+  const plain = scripts.filter(
+    (file) =>
+      file.test &&
+      !file.path.startsWith(`${folder}/support/`) &&
+      !stepsFiles.has(file.path) &&
+      !doubled.has(file.path),
+  );
+  const held = new Set([...featurePaths, ...paired, ...doubled, ...plain.map((file) => file.path)]);
 
   return {
     features: featurePaths.map((path) => featureOf(context, path, steps.get(path) ?? null)),
+    tests: plain.map((file) => plainTestOf(context, folder, file)),
     doubles,
     support: supportOf(
       context,
@@ -123,7 +150,7 @@ function contentsOf(context: AnalysisContext, folder: string, files: readonly st
 
 /**
  * The steps file the reader pairs a feature with (`Code.steps`), if it is in the lane's folder: in
- * a TypeScript target, `contracts/crayo.feature` with `contracts/support/crayo.steps.ts`.
+ * a TypeScript target, `tests/contracts/crayo.feature` with `tests/contracts/support/crayo.steps.ts`.
  */
 function stepsPathOf(
   context: AnalysisContext,
@@ -165,6 +192,15 @@ function stepsOf(context: AnalysisContext, path: string): StepsFile {
     name: posix.basename(path),
     linesOfCode: context.file(path).linesOfCode,
     adapters: file === undefined ? [] : constructedAdapters(context, file),
+  };
+}
+
+function plainTestOf(context: AnalysisContext, folder: string, file: CodeFile): PlainTest {
+  return {
+    id: file.path,
+    name: posix.relative(folder, file.path),
+    linesOfCode: file.linesOfCode,
+    adapters: constructedAdapters(context, file),
   };
 }
 

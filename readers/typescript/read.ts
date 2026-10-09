@@ -77,7 +77,7 @@ function isTest(externals: readonly string[]): boolean {
 /** The file that wires the application together: what it constructs draws `implements` arrows. */
 const COMPOSITION_ROOT = "src/index.ts";
 
-/** `contracts/support/crayo.steps.ts` is the steps of `contracts/crayo.feature`, as cucumber lays a suite out. */
+/** `tests/contracts/support/crayo.steps.ts` is the steps of `tests/contracts/crayo.feature`, as cucumber lays a suite out. */
 const STEPS = /^(.+)\/support\/([^/]+)\.steps\.ts$/;
 
 function stepsPairOf(path: string): readonly StepsPair[] {

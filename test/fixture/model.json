@@ -20,6 +20,12 @@
       ]
     },
     {
+      "path": "src/adapters/order-queue",
+      "entries": [
+        "order-queue.ts"
+      ]
+    },
+    {
       "path": "src/adapters/web-api",
       "entries": [
         "web-api.ts"
@@ -27,16 +33,16 @@
     }
   ],
   "rootEntries": [
-    "contracts",
     "features",
     "fixtures",
     "src",
+    "tests",
     "tools",
     "tsconfig.check.json"
   ],
   "features": [
     {
-      "path": "contracts/exchange.feature",
+      "path": "tests/contracts/exchange.feature",
       "text": "Feature: The exchange\n\n  Scenario: An order is filled\n    Given an order for one coin\n    Then the exchange fills it\n"
     },
     {
@@ -57,6 +63,13 @@
       "folders": [
         "staff",
         "suppliers"
+      ]
+    },
+    {
+      "path": "tests",
+      "folders": [
+        "contracts",
+        "entry-points"
       ]
     }
   ],
@@ -172,12 +185,69 @@
       "constructs": [
         "src/adapters/simulated-exchange/simulated-exchange.ts#SimulatedExchange",
         "src/infrastructure/staff/orders/services/OrderPlacer.ts#OrderPlacer",
-        "src/adapters/web-api/web-api.ts#WebApi"
+        "src/adapters/web-api/web-api.ts#WebApi",
+        "src/adapters/order-queue/order-queue.ts#OrderQueue"
       ],
       "importedFiles": [
         "src/adapters/simulated-exchange/simulated-exchange.ts",
         "src/infrastructure/staff/orders/services/OrderPlacer.ts",
-        "src/adapters/web-api/web-api.ts"
+        "src/adapters/web-api/web-api.ts",
+        "src/adapters/order-queue/order-queue.ts"
+      ]
+    },
+    {
+      "path": "src/adapters/order-queue/order-queue.ts",
+      "listed": true,
+      "compiled": true,
+      "test": false,
+      "linesOfCode": 18,
+      "externals": [],
+      "declares": [
+        "src/adapters/order-queue/order-queue.ts#OrderQueue"
+      ],
+      "imports": [
+        "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts#IPlaceOrder",
+        "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange"
+      ],
+      "constructorParameterTypes": [],
+      "constructs": [],
+      "importedFiles": [
+        "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts",
+        "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts"
+      ]
+    },
+    {
+      "path": "tests/contracts/OrderQueueTests.ts",
+      "listed": true,
+      "compiled": true,
+      "test": true,
+      "linesOfCode": 9,
+      "externals": [],
+      "declares": [],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [
+        "src/adapters/order-queue/order-queue.ts#OrderQueue"
+      ],
+      "importedFiles": [
+        "src/adapters/order-queue/order-queue.ts"
+      ]
+    },
+    {
+      "path": "tests/entry-points/OrderQueueEntryTests.ts",
+      "listed": true,
+      "compiled": true,
+      "test": true,
+      "linesOfCode": 8,
+      "externals": [],
+      "declares": [],
+      "imports": [],
+      "constructorParameterTypes": [],
+      "constructs": [
+        "src/adapters/order-queue/order-queue.ts#OrderQueue"
+      ],
+      "importedFiles": [
+        "src/adapters/order-queue/order-queue.ts"
       ]
     },
     {
@@ -196,7 +266,7 @@
       "importedFiles": []
     },
     {
-      "path": "contracts/exchange.feature",
+      "path": "tests/contracts/exchange.feature",
       "listed": true,
       "compiled": false,
       "test": false,
@@ -209,7 +279,7 @@
       "importedFiles": []
     },
     {
-      "path": "contracts/support/exchange.steps.ts",
+      "path": "tests/contracts/support/exchange.steps.ts",
       "listed": true,
       "compiled": true,
       "test": true,
@@ -390,6 +460,23 @@
       "linesOfCode": 16
     },
     {
+      "id": "src/adapters/order-queue/order-queue.ts#OrderQueue",
+      "name": "OrderQueue",
+      "kind": "class",
+      "file": "src/adapters/order-queue/order-queue.ts",
+      "line": 4,
+      "exported": true,
+      "implements": [
+        {
+          "written": "IExchange",
+          "target": "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts#IExchange"
+        }
+      ],
+      "buildsPerScenario": [],
+      "doc": "",
+      "linesOfCode": 14
+    },
+    {
       "id": "src/adapters/web-api/web-api.ts#WebApi",
       "name": "WebApi",
       "kind": "class",
@@ -455,8 +542,8 @@
   ],
   "steps": [
     {
-      "steps": "contracts/support/exchange.steps.ts",
-      "feature": "contracts/exchange.feature"
+      "steps": "tests/contracts/support/exchange.steps.ts",
+      "feature": "tests/contracts/exchange.feature"
     }
   ],
   "claimed": []

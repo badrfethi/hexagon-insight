@@ -499,6 +499,11 @@
         background: #f2dfe2;
         border-color: #b1838a;
       }
+      /* A test written as code is a plain card in the tests' hue, with no turned corner. */
+      .tblock.plain {
+        background: #f4fafa;
+        border-color: #6d9e97;
+      }
       .tblock.double {
         background: #f3ecd9;
         border-color: #b59c62;
@@ -789,7 +794,7 @@
           let y = MARGIN + (tallest - spans[index]) / 2;
           column.blocks.forEach((block) => {
             const height = heightOf(block, scale);
-            places.set(block.id, {
+            places.set(placeKey(column.lane, block.id), {
               x: xs[index],
               y,
               width: columnWidth(column),
@@ -818,32 +823,9 @@
         });
       }
 
-      // The core is what the staff stand on, so it lies under them: one band as wide as the staff
-      // and supplier columns together (every column, if the map has neither), as tall as a strip
-      // block. No arrow starts or ends at it (`coreOf`), so it is in no column. It returns where the
-      // band ends, or where it would have started when there is no core.
-      function layoutCore(places, top) {
-        if (!map.core) return top;
-        const xs = columnXs();
-        const all = map.columns.map((column, index) => ({ column, x: xs[index] }));
-        const hexagon = all.filter(({ column }) => ["staff", "suppliers"].includes(column.lane));
-        const spans = hexagon.length > 0 ? hexagon : all;
-        const x = spans.length > 0 ? spans[0].x : MARGIN;
-        const last = spans[spans.length - 1];
-        const right = last ? last.x + columnWidth(last.column) : x;
-        places.set(map.core.id, {
-          x,
-          y: top + BLOCK_GAP * 2,
-          width: Math.max(right - x, STRIP_MIN_WIDTH),
-          height: STRIP_HEIGHT,
-          column: -1,
-        });
-        return top + BLOCK_GAP * 2 + STRIP_HEIGHT;
-      }
-
       function layout() {
         const places = new Map();
-        const bottom = layoutCore(places, layoutColumns(places, heightScale()));
+        const bottom = layoutColumns(places, heightScale());
         const stripTop = bottom + STRIP_GAP;
         layoutStrip(places, stripTop);
         return { places, stripTop };
@@ -856,14 +838,43 @@
         return other.column > place.column ? "right" : "left";
       }
 
+      // An adapter with two sides is in both adapter columns under one id (`lanesOf`), so its copy
+      // among the incoming adapters is placed under a key of its own. A `references` arrow, which is
+      // how it drives the hexagon, leaves that copy; every other arrow is the outgoing copy's.
+      function placeKey(lane, id) {
+        return lane === "incoming-adapters" && twoSided().has(id) ? `${id}@incoming` : id;
+      }
+
+      function twoSided() {
+        const idsIn = (lane) =>
+          (map.columns.find((column) => column.lane === lane)?.blocks ?? []).map((b) => b.id);
+        const outgoing = new Set(idsIn("outgoing-adapters"));
+        return new Set(idsIn("incoming-adapters").filter((id) => outgoing.has(id)));
+      }
+
+      function endKey(arrow, end, places) {
+        const incoming = `${arrow[end]}@incoming`;
+        return end === "from" && arrow.kind === "references" && places.has(incoming)
+          ? incoming
+          : arrow[end];
+      }
+
+      // An arrow is drawn when both its ends are on the map: a `checked-by` arrow ends at a contract
+      // test, which is on Tests.
+      function placed(arrows, places) {
+        return arrows.filter((arrow) => places.has(arrow.from) && places.has(arrow.to));
+      }
+
       function anchors(arrows, places) {
         const ends = new Map();
         const add = (key, entry) => ends.set(key, [...(ends.get(key) ?? []), entry]);
         arrows.forEach((arrow, index) => {
-          const from = places.get(arrow.from);
-          const to = places.get(arrow.to);
-          add(`${arrow.from} ${sideOf(from, to)}`, { index, end: "from", toward: to });
-          add(`${arrow.to} ${sideOf(to, from)}`, { index, end: "to", toward: from });
+          const fromKey = endKey(arrow, "from", places);
+          const toKey = endKey(arrow, "to", places);
+          const from = places.get(fromKey);
+          const to = places.get(toKey);
+          add(`${fromKey} ${sideOf(from, to)}`, { index, end: "from", toward: to });
+          add(`${toKey} ${sideOf(to, from)}`, { index, end: "to", toward: from });
         });
         const points = arrows.map(() => ({}));
         ends.forEach((entries, key) => {
@@ -1125,7 +1136,7 @@
 
       function drawMap() {
         const { places, stripTop } = layout();
-        const arrows = shownArrows();
+        const arrows = placed(shownArrows(), places);
         const lit = litBlocks(arrows);
         const points = anchors(arrows, places);
         const broken = brokenIds();
@@ -1148,10 +1159,9 @@
         const drawn = map.columns.flatMap((column) =>
           column.blocks.map((block) => ({ block, lane: column.lane })),
         );
-        const core = map.core ? [{ block: map.core, lane: "core" }] : [];
-        [...drawn, ...core, ...map.strip.map((block) => ({ block, lane: "outside" }))].forEach(
+        [...drawn, ...map.strip.map((block) => ({ block, lane: "outside" }))].forEach(
           ({ block, lane }) => {
-            const place = places.get(block.id);
+            const place = places.get(placeKey(lane, block.id));
             root.append(blockNode(block, lane, place, broken.has(block.id), lit.has(block.id)));
           },
         );
@@ -1178,10 +1188,9 @@
 
       function laneRows() {
         const hues = map.columns.map((column) => keyRow(swatch(column.lane), column.title));
-        const core = map.core ? [keyRow(swatch("core"), "Core")] : [];
         const strip =
           map.strip.length > 0 ? [keyRow(swatch("outside"), "Outside the groups")] : [];
-        return [...hues, ...core, ...strip];
+        return [...hues, ...strip];
       }
 
       // Which kind of test checks an adapter follows from its lane (`rules.feature`), so the key
@@ -1288,7 +1297,6 @@
       function blockAt(id) {
         const drawn = [
           ...map.columns.flatMap((column) => column.blocks),
-          ...(map.core ? [map.core] : []),
           ...map.strip,
         ];
         return drawn.find((block) => block.id === id);
@@ -1391,7 +1399,9 @@
       }
 
       function isEmpty(lane) {
-        return lane.features.length + lane.doubles.length + lane.support.length === 0;
+        return (
+          lane.features.length + lane.tests.length + lane.doubles.length + lane.support.length === 0
+        );
       }
 
       // Every block the view draws, flat, each with the style it is drawn in and the file it is
@@ -1399,6 +1409,7 @@
       function testEntries() {
         const lanes = (tests?.lanes ?? []).flatMap((lane) => [
           ...lane.features.flatMap((feature) => featureEntries(lane, feature)),
+          ...lane.tests.map(plainEntry),
           ...lane.doubles.map((double) => ({ style: "double", file: double.file, block: double })),
           ...lane.support.map((file) => ({
             style: file.real ? "support real" : "support",
@@ -1422,6 +1433,12 @@
         const own = { style, file: feature.id, block: feature };
         if (!feature.steps) return [own];
         return [own, { style: "steps", file: feature.steps.id, block: feature.steps }];
+      }
+
+      // A test written as code rather than Gherkin, such as a C# test class: it names the adapters
+      // it builds, as a contract steps file does.
+      function plainEntry(test) {
+        return { style: "plain", file: test.id, block: test };
       }
 
       function testEntryAt(id) {
@@ -1452,7 +1469,7 @@
         const features = lane.features.map((one) =>
           Math.max(one.linesOfCode, one.steps?.linesOfCode ?? 0),
         );
-        const rest = [...lane.doubles, ...lane.support].map((one) => one.linesOfCode);
+        const rest = [...lane.tests, ...lane.doubles, ...lane.support].map((one) => one.linesOfCode);
         return {
           lines: [...features, ...rest].reduce((sum, n) => sum + n, 0),
           count: features.length + rest.length,
@@ -1570,6 +1587,7 @@
           { class: "lane" },
           ...head,
           ...featureNodes(lane, draw),
+          ...lane.tests.map((test) => draw(plainEntry(test))),
           ...laneBoxes(lane, draw),
         );
       }
@@ -1635,6 +1653,7 @@
             keyRow(tsample("acceptance"), "acceptance feature"),
             keyRow(tsample("contract"), "contract feature"),
             keyRow(tsample("steps"), "contract steps — names the adapter it builds"),
+            keyRow(tsample("plain"), "test written as code — names the adapters it builds"),
           ]),
           group(doubleRows()),
           group([

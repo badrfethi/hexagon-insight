@@ -1,5 +1,5 @@
 import type { AnalysisContext } from "./context.js";
-import { contractFeaturesOf } from "./contracts.js";
+import { contractTestsOf } from "./contracts.js";
 import { ADAPTER_RULE, RULES } from "./rules.js";
 import { type Envelope, runRules, type RulesRun } from "./rules-run.js";
 import { testKinds } from "./test-kinds.js";
@@ -73,7 +73,7 @@ function viewOf(context: AnalysisContext, broken: Unplaced): Break["view"] {
 /** What Tests draws: each suite's folder, and each file the suites share (`shared-tests.ts`). */
 function onTests(context: AnalysisContext): readonly string[] {
   return context.memo("on-tests", () => [
-    ...testKinds(context.model.rootEntries).map((kind) => `${kind.folder}/`),
+    ...testKinds(context.model).map((kind) => `${kind.folder}/`),
     ...context.sharedTests.map(({ path }) => path),
   ]);
 }
@@ -85,7 +85,7 @@ function checkedAdapters(context: AnalysisContext): ReadonlySet<string> {
     () =>
       new Set(
         context.blocks
-          .filter((block) => contractFeaturesOf(context, block).length > 0)
+          .filter((block) => contractTestsOf(context, block).length > 0)
           .map((block) => block.id),
       ),
   );

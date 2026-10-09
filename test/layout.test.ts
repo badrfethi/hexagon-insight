@@ -77,8 +77,8 @@ test("a core with no contract tests is laid out in the hexagon's folders", () =>
 test("test code that uses src outside the test folders is a break per folder", () => {
   assert.deepEqual(testsOutside, [
     "tests/acceptance/: test code that uses the application lives in a test folder: holds test " +
-      "code that uses the application, in 2 files, outside entry-points/, features/, core-tests/, " +
-      "contracts/",
+      "code that uses the application, in 2 files, outside features/, tests/core/, tests/entry-points/, " +
+      "tests/contracts/",
   ]);
 });
 
@@ -100,15 +100,18 @@ function listing(model: Written, path: string, folders: readonly string[]): Writ
   return model.folders.map((listed) => (listed.path === path ? { path, folders } : listed));
 }
 
-/** A core in `src/core`, and no `contracts/` folder or anything in it. */
+/** A core in `src/core`, and no `tests/contracts/` folder or anything in it. */
 function withoutContracts(model: Written): Written {
-  const inContracts = (path: string): boolean => path.startsWith("contracts/");
+  const inContracts = (path: string): boolean => path.startsWith("tests/contracts/");
 
   return {
     ...model,
-    rootEntries: model.rootEntries.filter((entry) => entry !== "contracts"),
+    folders: listing(
+      { ...model, folders: listing(model, "src", ["adapters", "core", "infrastructure"]) },
+      "tests",
+      ["entry-points"],
+    ),
     features: model.features.filter(({ path }) => !inContracts(path)),
-    folders: listing(model, "src", ["adapters", "core", "infrastructure"]),
     files: model.files.filter(({ path }) => !inContracts(path)),
     declarations: model.declarations.filter(({ file }) => !inContracts(file)),
     steps: model.steps.filter(({ steps }) => !inContracts(steps)),

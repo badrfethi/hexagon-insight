@@ -4,8 +4,8 @@ import type { GroupFolder } from "./model.js";
 /**
  * Where a block's code is. The map splits `adapters` into two columns by direction (`map.ts`), so
  * the three group columns become four; and `outside` is the catch-all row under them, which owns
- * no directory (`outside.ts`). `core` is the one block of `src/core`, drawn under staff and
- * suppliers (`coreOf`). The tests are not on the map: they are drawn on Tests (`tests.ts`).
+ * no directory (`outside.ts`). `core` is the one block of `src/core`, drawn in a column of its own
+ * between staff and suppliers (`coreOf`). The tests are not on the map: they are drawn on Tests (`tests.ts`).
  */
 export type Column = "staff" | "suppliers" | "adapters" | "core" | "outside";
 

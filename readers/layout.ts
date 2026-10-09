@@ -21,8 +21,11 @@ export function layoutOf(root: string): Layout {
   };
 }
 
-/** The folders whose own folders the layout rule reads (`FolderListing`). */
-const LISTED: readonly FolderListing["path"][] = ["src", "src/infrastructure"];
+/**
+ * The folders whose own folders are read (`FolderListing`): `src` and `src/infrastructure` for the
+ * layout rule, and `tests` for which of the code-first kinds of test a target has (`test-kinds.ts`).
+ */
+const LISTED: readonly FolderListing["path"][] = ["src", "src/infrastructure", "tests"];
 
 /**
  * Every folder directly in a column's folder, by name. A column's folder is required of a target,

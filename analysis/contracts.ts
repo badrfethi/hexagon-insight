@@ -3,80 +3,84 @@ import { AstBuilder, GherkinClassicTokenMatcher, Parser } from "@cucumber/gherki
 import type { Block } from "./blocks.js";
 import type { AnalysisContext } from "./context.js";
 import type { CodeFile, Declaration } from "./model.js";
+import { CONTRACTS } from "./test-kinds.js";
 
 export type GherkinDocument = ReturnType<Parser<unknown>["parse"]>;
 
-/** A feature that runs an adapter, parsed, under its path relative to the root. */
-export interface ContractFeature {
-  readonly path: string;
-  readonly document: GherkinDocument;
+/** The contract tests that belong to a block: those under `tests/contracts/` (`testsRunning`). */
+export function contractTestsOf(context: AnalysisContext, block: Block): readonly string[] {
+  return testsRunning(context, block, CONTRACTS);
 }
 
 /**
- * The contract features that belong to a block: those under `contracts/` (`featuresRunning`).
- */
-export function contractFeaturesOf(context: AnalysisContext, block: Block): ContractFeature[] {
-  return featuresRunning(context, block, "contracts");
-}
-
-/**
- * The features of the suite in `folder` that belong to a block — `contracts` for contract tests,
- * `entry-points` for entry point tests.
+ * The tests of the suite in `folder` that belong to a block, by path — `tests/contracts` for
+ * contract tests, `tests/entry-points` for entry point tests.
  *
- * A feature belongs to the adapter its steps file **constructs** — `new` on a class the block
- * declares — not to every adapter the steps file imports (#74, decision 18). So
- * `contracts/anthropic.feature` belongs to both Claude adapters, and not to `crayo-clip-provider`,
- * whose constant it only imports. A steps file is paired with its feature by the reader
- * (`Code.steps`): in a TypeScript target, `contracts/support/crayo.steps.ts` with
- * `contracts/crayo.feature`, as cucumber's suite is laid out.
+ * Either kind is a feature or a plain test (`rules.feature`, Rule 3), and a test belongs to the
+ * adapter it **constructs** — `new` on a class the block declares — not to every adapter it imports
+ * (#74, decision 18). So `anthropic.feature` belongs to both Claude adapters, and not to
+ * `crayo-clip-provider`, whose constant it only imports.
+ *
+ * - **A feature** directly in `folder` constructs what its steps file does. The reader pairs the two
+ *   (`Code.steps`): in a TypeScript target, `<folder>/support/crayo.steps.ts` with
+ *   `<folder>/crayo.feature`, as cucumber's suite is laid out.
+ * - **A plain test** is a file of test code (`CodeFile.test`) anywhere in `folder` but its
+ *   `support/`, which is not a feature's steps: what it constructs, it tests. What a suite keeps in
+ *   `support/` serves its tests, and is no test itself.
  */
-export function featuresRunning(
+export function testsRunning(
   context: AnalysisContext,
   block: Block,
   folder: string,
-): ContractFeature[] {
-  return context.memo(`features:${folder}`, () => featuresIn(context, folder)).get(block.id) ?? [];
+): readonly string[] {
+  return context.memo(`tests:${folder}`, () => testsIn(context, folder)).get(block.id) ?? [];
 }
 
-function featuresIn(context: AnalysisContext, folder: string): Map<string, ContractFeature[]> {
+function testsIn(context: AnalysisContext, folder: string): Map<string, string[]> {
   const featureOf = new Map(context.model.steps.map((pair) => [pair.steps, pair.feature] as const));
-  const owned = new Map<string, ContractFeature[]>();
-  const pairs = context.compiled.flatMap((steps) =>
-    ownersOf(context, steps, featureOf.get(steps.path), folder),
+  const owned = new Map<string, string[]>();
+  const pairs = context.compiled.flatMap((file) =>
+    ownersOf(context, file, testOf(context, file, featureOf.get(file.path), folder)),
   );
 
-  pairs.forEach(({ id, feature }) => owned.set(id, [...(owned.get(id) ?? []), feature]));
+  pairs.forEach(({ id, test }) => owned.set(id, [...(owned.get(id) ?? []), test]));
 
   return owned;
 }
 
-function ownersOf(
+/** The test a file stands for in `folder`: the feature it is the steps of, or itself as a plain test. */
+function testOf(
   context: AnalysisContext,
-  steps: CodeFile,
+  file: CodeFile,
   paired: string | undefined,
   folder: string,
-): { readonly id: string; readonly feature: ContractFeature }[] {
-  const feature =
-    paired !== undefined && posix.dirname(paired) === folder
-      ? featureNamed(context, paired)
+): string | undefined {
+  if (paired !== undefined) {
+    return posix.dirname(paired) === folder && context.featureAt(paired) !== undefined
+      ? paired
       : undefined;
+  }
 
-  return feature === undefined
+  return file.test && file.path.startsWith(`${folder}/`) && !file.path.startsWith(`${folder}/support/`)
+    ? file.path
+    : undefined;
+}
+
+function ownersOf(
+  context: AnalysisContext,
+  file: CodeFile,
+  test: string | undefined,
+): { readonly id: string; readonly test: string }[] {
+  return test === undefined
     ? []
-    : [...constructedBlocks(context, steps)].map((id) => ({ id, feature }));
+    : [...constructedBlocks(context, file)].map((id) => ({ id, test }));
 }
 
-function featureNamed(context: AnalysisContext, path: string): ContractFeature | undefined {
-  const feature = context.featureAt(path);
-
-  return feature === undefined ? undefined : { path, document: parseFeature(feature.text) };
+function constructedBlocks(context: AnalysisContext, file: CodeFile): Set<string> {
+  return new Set(constructedAdapters(context, file).map((adapter) => adapter.block));
 }
 
-function constructedBlocks(context: AnalysisContext, steps: CodeFile): Set<string> {
-  return new Set(constructedAdapters(context, steps).map((adapter) => adapter.block));
-}
-
-/** A class a contract steps file constructs, in the block that declares it, and what it implements. */
+/** A class a test constructs, in the block that declares it, and what it implements. */
 export interface ConstructedAdapter {
   /** The class, such as `ClaudeBriefParser`. */
   readonly name: string;
@@ -87,17 +91,18 @@ export interface ConstructedAdapter {
 }
 
 /**
- * Every class a steps file constructs that a block declares, once each, in the order first built.
+ * Every class a steps file or a plain test constructs that a block declares, once each, in the
+ * order first built.
  *
- * It is what ties a contract or entry point feature to its adapter, so it is shared by the rule that
+ * It is what ties a contract or entry point test to its adapter, so it is shared by the rule that
  * pairs each adapter with its kind of test and by the Tests view, which names the adapter on the
- * steps file rather than drawing it again: the adapter lives on the Map.
+ * test rather than drawing it again: the adapter lives on the Map.
  */
 export function constructedAdapters(
   context: AnalysisContext,
-  steps: CodeFile,
+  file: CodeFile,
 ): readonly ConstructedAdapter[] {
-  return steps.constructs
+  return file.constructs
     .map((id) => context.declaration(id))
     .flatMap((declaration) => adapterOf(context, declaration));
 }
