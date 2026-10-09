@@ -81,7 +81,8 @@ definitions in `steps/` are open (`steps/AGENTS.md`).
   JSON file instead of reading the target; such a model measures no doors. It is a test seam, not
   a setting for targets.
 - `layout.test.ts` runs the layout rule over variants of that model, each a target of its own under
-  `test/.runs/` (gitignored, removed after the run).
+  `test/.runs/` (gitignored, removed after the run). `core.test.ts` does the same for the core's
+  `uses` arrows and the rule that the core stands on nothing.
 - `boundary.test.ts` holds the line between the two parts, how the reader is picked, and that
   `rules` exits 2 on a target it cannot read.
 

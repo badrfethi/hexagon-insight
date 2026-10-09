@@ -1,7 +1,7 @@
 import type { Block } from "./blocks.js";
 import { type AnalysisContext, inFolder } from "./context.js";
 import { contractTestsOf } from "./contracts.js";
-import type { Declaration } from "./model.js";
+import type { CodeFile, Declaration } from "./model.js";
 
 /**
  * An arrow on the map (#74, decision 3).
@@ -18,13 +18,17 @@ import type { Declaration } from "./model.js";
  *   `tests/contracts/` (ADR-0019), a feature or a plain test. The test belongs to the adapter it
  *   constructs (`contracts.ts`), so `tests/contracts/anthropic.feature` draws two of these, one to
  *   each Claude adapter. It is the only arrow that ends outside `src/`.
+ * - `uses` — a block, or a file of the core, uses a file of the core (`usedFiles`): nearly
+ *   everything does, so it is the core's own kind, and the page draws only the clicked block's. A
+ *   file of the core that uses the target's code outside `src/core` draws one too, to the block that
+ *   code is in, and breaks the rule that the core stands on nothing (`rules.feature`, Rule 6).
  *
  * Raw imports are otherwise not arrows.
  */
 export interface Arrow {
   readonly from: string;
   readonly to: string;
-  readonly kind: "depends-on" | "implements" | "references" | "checked-by";
+  readonly kind: "depends-on" | "implements" | "references" | "checked-by" | "uses";
 }
 
 export function arrowsOf(context: AnalysisContext): Arrow[] {
@@ -42,7 +46,47 @@ export function arrowsOf(context: AnalysisContext): Arrow[] {
     (arrow) => !referenced.has(`${arrow.from} ${arrow.to}`),
   );
 
-  return unique([...references, ...dependencies, ...implementations(context), ...checks(context)]);
+  return unique([
+    ...references,
+    ...dependencies,
+    ...implementations(context),
+    ...checks(context),
+    ...uses(context),
+  ]);
+}
+
+/**
+ * The target's own files a file uses, each once, in the order first named: those it imports, and
+ * those declaring what it imports, takes in a constructor or constructs. Not the file itself.
+ */
+export function usedFiles(context: AnalysisContext, file: CodeFile): readonly string[] {
+  const declared = [...file.imports, ...file.constructorParameterTypes, ...file.constructs].map(
+    (id) => context.declaration(id).file,
+  );
+
+  return [...new Set([...file.importedFiles, ...declared])].filter((path) => path !== file.path);
+}
+
+/** Each block and file of the core to each file of the core it uses, and the core's to what else it uses. */
+function uses(context: AnalysisContext): Arrow[] {
+  const coreAt = new Map(context.core.map((block) => [block.directory, block] as const));
+  const toCore = context.blocks.flatMap((block) =>
+    context
+      .filesOf(block)
+      .flatMap((file) => usedFiles(context, file))
+      .flatMap((path) => coreAt.get(path) ?? [])
+      .map((target) => ({ from: block.id, to: target.id, kind: "uses" as const })),
+  );
+  const fromCore = context.core.flatMap((block) => {
+    const file = context.fileAt(block.directory);
+
+    return (file === undefined ? [] : usedFiles(context, file))
+      .flatMap((path) => coreAt.get(path) ?? context.blockOf(path) ?? [])
+      .filter((target) => isOther(target, block))
+      .map((target) => ({ from: block.id, to: target.id, kind: "uses" as const }));
+  });
+
+  return [...toCore, ...fromCore];
 }
 
 /** Each block to the contract tests that check it — the outgoing adapters, in practice. */

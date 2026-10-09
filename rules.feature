@@ -92,3 +92,12 @@ Feature: The hexagon's rules
     Scenario: test code that uses the application lives in a test folder
       Given the test code that uses code under "src"
       Then each of it is under "features", "tests/core", "tests/entry-points" or "tests/contracts"
+
+  Rule: The core stands on nothing
+    The core is what the staff stand on, so it uses nothing of the target's outside `src/core`:
+    no group, no adapter, no other code. What it takes from outside the repository, a package, is
+    its own business.
+
+    Scenario: no file in "src/core" uses the target's code outside it
+      Given the files under "src/core"
+      Then none of them uses the target's code outside "src/core"

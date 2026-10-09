@@ -22,7 +22,7 @@ export class RulesWorld extends World {
   scenarios: readonly ScenarioDoor[] = [];
   /** The folders a layout rule is about, relative to the root (`layout.steps.ts`). */
   folders: readonly string[] = [];
-  /** The files a layout rule is about (`layout.steps.ts`). */
+  /** The files a layout or core rule is about (`layout.steps.ts`, `core.steps.ts`). */
   files: readonly CodeFile[] = [];
 
   /** Reads the target, or waits for the read another scenario started. */

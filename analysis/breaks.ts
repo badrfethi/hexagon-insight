@@ -192,11 +192,12 @@ function unshaped(failure: Failure): string {
 }
 
 function blocksNamed(context: AnalysisContext, text: string): readonly string[] {
-  const ids = (text.match(/src\/[\w./-]+/g) ?? []).flatMap((path) =>
-    context.blocks
+  const ids = (text.match(/src\/[\w./-]+/g) ?? []).flatMap((path) => [
+    ...context.blocks
       .filter((block) => `${path}/`.startsWith(`src/${block.id}/`))
       .map((block) => block.id),
-  );
+    ...context.core.filter((block) => path === block.directory).map((block) => block.id),
+  ]);
 
   return [...new Set(ids)];
 }

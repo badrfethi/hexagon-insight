@@ -70,6 +70,8 @@ not read:
    in `src` but `infrastructure`, `adapters` and `core`, nor in `src/infrastructure` but `staff`
    and `suppliers`, unless the target's reader claims it for its language; and test code that uses
    code under `src` lives in one of the four test folders.
+6. The core stands on nothing: no file under `src/core` uses the target's code outside it (a
+   package is its own business).
 
 ## Breaks and read failures
 
@@ -137,7 +139,9 @@ Every target provides:
 - `src/infrastructure/staff`, `src/infrastructure/suppliers` and `src/adapters`, one block per
   folder under each. A core, if it has one, is `src/core`: the map draws a block for each of its
   files, at any depth, since every file the staff stand on matters on its own, in a column of its
-  own between staff and suppliers, with no arrows to it, since nearly everything uses it. Nothing
+  own between staff and suppliers. Nearly everything uses it, so its `uses` arrows, to the core
+  and out of it, are drawn only for the block clicked; one out of the core to the target's other
+  code is a break (rule 6). Nothing
   else sits directly in `src` or `src/infrastructure` (rule 5) but what its language claims, below.
 - Its tests in the four folders above: `features/` always, and `tests/entry-points/`,
   `tests/core/` and `tests/contracts/` when it has tests of those kinds. Test code that uses code

@@ -69,8 +69,8 @@ export interface BlockView {
 
 /**
  * The columns, which are cut out of `context.blocks` and the core. The core sits between staff and
- * suppliers: the staff stand on it, and it stands on nothing, so nothing is drawn beyond it but the
- * suppliers' ports and what implements them.
+ * suppliers: the staff stand on it, and it stands on nothing (`rules.feature`, Rule 6), so nothing is
+ * drawn beyond it but the suppliers' ports and what implements them.
  */
 const LANES: readonly { readonly lane: Lane; readonly title: string }[] = [
   { lane: "incoming-adapters", title: "Incoming adapters" },

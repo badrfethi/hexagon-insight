@@ -73,7 +73,7 @@ test("the strip holds every file that is in no group's folder and on no test, co
   ]);
 });
 
-test("each file of a src/core is a block in a column between staff and suppliers, out of the strip and in no arrow", async () => {
+test("each file of a src/core is a block in a column between staff and suppliers, out of the strip, and in no arrow when nothing uses it", async () => {
   assert.equal(
     map.columns.some(({ lane }) => lane === "core"),
     false,
