@@ -4,9 +4,10 @@ import type { GroupFolder } from "./model.js";
 /**
  * Where a block's code is. The map splits `adapters` into two columns by direction (`map.ts`), so
  * the three group columns become four; and `outside` is the catch-all row under them, which owns
- * no directory (`outside.ts`). The tests are not on the map: they are drawn on Tests (`tests.ts`).
+ * no directory (`outside.ts`). `core` is the one block of `src/core`, drawn under staff and
+ * suppliers (`coreOf`). The tests are not on the map: they are drawn on Tests (`tests.ts`).
  */
-export type Column = "staff" | "suppliers" | "adapters" | "outside";
+export type Column = "staff" | "suppliers" | "adapters" | "core" | "outside";
 
 /**
  * A block on the map: one group under `src/infrastructure/staff/` or `src/infrastructure/suppliers/`,
@@ -33,6 +34,18 @@ export const COLUMNS: readonly ColumnPlace[] = [
   { column: "suppliers", path: "src/infrastructure/suppliers" },
   { column: "adapters", path: "src/adapters" },
 ];
+
+/**
+ * The core, when the target has a `src/core` (`README.md`, _What the target provides_): one block
+ * for all of it, however it is split inside, since the core is one thing the staff stand on, not
+ * groups of their own. It is kept out of the blocks the arrows and the rules are asked of: nearly
+ * everything uses the core, so an arrow to it says nothing its place on the map does not.
+ */
+export function coreOf(srcFolders: readonly string[]): Block | undefined {
+  return srcFolders.includes("core")
+    ? { id: "core", name: "core", column: "core", directory: "src/core" }
+    : undefined;
+}
 
 /**
  * The blocks, one per folder in a column's folder (`readers/layout.ts`), so a new group or adapter

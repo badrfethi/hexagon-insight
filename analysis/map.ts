@@ -11,6 +11,11 @@ export interface InsightMap {
   readonly columns: readonly MapColumn[];
   /** The row under the columns: the code that belongs to no group and is not a test (`outside.ts`). */
   readonly strip: readonly BlockView[];
+  /**
+   * The core, drawn as a band under staff and suppliers; absent, not empty, for a target without a
+   * `src/core`, so a map without one is the map it was before the core was drawn (`coreOf`).
+   */
+  readonly core?: BlockView;
   /** Drawn only for a clicked block. */
   readonly arrows: readonly Arrow[];
   /**
@@ -30,7 +35,13 @@ export interface InsightMap {
  * how it drives the hexagon (`arrows.ts`); every other adapter is outgoing, including one that
  * implements no port but serves outgoing adapters, such as `process-runner`.
  */
-export type Lane = "incoming-adapters" | "staff" | "suppliers" | "outgoing-adapters" | "outside";
+export type Lane =
+  | "incoming-adapters"
+  | "staff"
+  | "suppliers"
+  | "outgoing-adapters"
+  | "core"
+  | "outside";
 
 export interface MapColumn {
   readonly lane: Lane;
@@ -72,6 +83,7 @@ export async function mapOf(context: AnalysisContext, root: string): Promise<Ins
   return {
     columns: columnsOf(context),
     strip: context.outside.map((block) => outsideViewOf(context, block)),
+    ...(context.core === undefined ? {} : { core: coreViewOf(context, context.core) }),
     arrows: arrowsOf(context),
     breaks,
   };
@@ -94,6 +106,7 @@ const LANE_OF: Readonly<Record<Column, (context: AnalysisContext, block: Block) 
   suppliers: () => "suppliers",
   adapters: (context, block) =>
     incomingPortGroupsOf(context, block).length > 0 ? "incoming-adapters" : "outgoing-adapters",
+  core: () => "core",
   outside: () => "outside",
 };
 
@@ -103,6 +116,14 @@ export function laneOf(context: AnalysisContext, block: Block): Lane {
 
 function viewOf(context: AnalysisContext, block: Block): BlockView {
   return sized(block, context.filesOf(block));
+}
+
+/** The core is in no group, so its files are those under its folder, read directly. */
+function coreViewOf(context: AnalysisContext, core: Block): BlockView {
+  return sized(
+    core,
+    context.compiled.filter((file) => file.path.startsWith(`${core.directory}/`)),
+  );
 }
 
 /** A catch-all block owns no directory, so its size is read from the files it gathered. */

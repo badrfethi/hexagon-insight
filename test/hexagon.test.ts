@@ -63,6 +63,47 @@ test("the strip holds the code that is in no group and on no test", () => {
   ]);
 });
 
+test("a src/core is one block under staff and suppliers, out of the strip and in no arrow", async () => {
+  assert.equal("core" in map, false);
+
+  const model = await readModel(FIXTURE);
+  const withCore = await mapOf(
+    contextOf({
+      ...model,
+      folders: model.folders.map((folder) =>
+        folder.path === "src" ? { ...folder, folders: [...folder.folders, "core"] } : folder,
+      ),
+      files: [
+        ...model.files,
+        {
+          path: "src/core/Money.ts",
+          listed: true,
+          compiled: true,
+          test: false,
+          linesOfCode: 12,
+          externals: ["decimal.js"],
+          declares: [],
+          imports: [],
+          constructorParameterTypes: [],
+          constructs: [],
+          importedFiles: [],
+        },
+      ],
+    }),
+    FIXTURE,
+  );
+
+  assert.deepEqual(withCore.core, {
+    id: "core",
+    name: "core",
+    column: "core",
+    linesOfCode: 12,
+    externals: ["decimal.js"],
+  });
+  assert.deepEqual(withCore.strip, map.strip);
+  assert.deepEqual(withCore.arrows, map.arrows);
+});
+
 test("the arrows come from what each block imports, takes, constructs and is checked by", () => {
   assert.deepEqual(map.arrows, [
     { from: "adapters/web-api", to: "infrastructure/staff/orders", kind: "references" },

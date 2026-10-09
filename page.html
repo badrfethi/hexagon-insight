@@ -676,6 +676,7 @@
         staff: { fill: "#dfeadb", edge: "#7d9f74" },
         suppliers: { fill: "#f0e6d6", edge: "#b1976f" },
         "outgoing-adapters": { fill: "#e6e1f1", edge: "#8e82b4" },
+        core: { fill: "#f2dfe2", edge: "#b47d87" },
         outside: { fill: "#e6e8ec", edge: "#8e97a3" },
       };
 
@@ -723,12 +724,31 @@
       // ---- Map -----------------------------------------------------------------------------------
 
       // `columnXs` is where each column starts, so no other maths has to know the widths.
-      function columnWidth() {
-        return COLUMN_WIDTH;
+      //
+      // A column is as wide as its longest word needs, and never narrower than `COLUMN_WIDTH`: a name
+      // wraps at its spaces and hyphens (`words`), but a word has nowhere to break, and a C# project
+      // is one long word (`CryptoTrader.Adapters.AspNetWebApi`). So the column grows to fit it, with
+      // the padding on both sides and the count in the corner, rather than the name running over.
+      function columnWidth(column) {
+        RULER.font = NAME_FONT;
+        const needs = column.blocks.flatMap((block) =>
+          words(block.name).map(
+            (word) =>
+              RULER.measureText(word).width +
+              PAD * 2 +
+              (block.externals.length === 0 ? 0 : PILL.width + 9),
+          ),
+        );
+        return Math.ceil(Math.max(COLUMN_WIDTH, ...needs));
       }
 
       function columnXs() {
-        return map.columns.map((column, index) => MARGIN + index * (COLUMN_WIDTH + COLUMN_GAP));
+        let x = MARGIN;
+        return map.columns.map((column) => {
+          const at = x;
+          x += columnWidth(column) + COLUMN_GAP;
+          return at;
+        });
       }
 
       function mapWidth() {
@@ -798,9 +818,32 @@
         });
       }
 
+      // The core is what the staff stand on, so it lies under them: one band as wide as the staff
+      // and supplier columns together (every column, if the map has neither), as tall as a strip
+      // block. No arrow starts or ends at it (`coreOf`), so it is in no column. It returns where the
+      // band ends, or where it would have started when there is no core.
+      function layoutCore(places, top) {
+        if (!map.core) return top;
+        const xs = columnXs();
+        const all = map.columns.map((column, index) => ({ column, x: xs[index] }));
+        const hexagon = all.filter(({ column }) => ["staff", "suppliers"].includes(column.lane));
+        const spans = hexagon.length > 0 ? hexagon : all;
+        const x = spans.length > 0 ? spans[0].x : MARGIN;
+        const last = spans[spans.length - 1];
+        const right = last ? last.x + columnWidth(last.column) : x;
+        places.set(map.core.id, {
+          x,
+          y: top + BLOCK_GAP * 2,
+          width: Math.max(right - x, STRIP_MIN_WIDTH),
+          height: STRIP_HEIGHT,
+          column: -1,
+        });
+        return top + BLOCK_GAP * 2 + STRIP_HEIGHT;
+      }
+
       function layout() {
         const places = new Map();
-        const bottom = layoutColumns(places, heightScale());
+        const bottom = layoutCore(places, layoutColumns(places, heightScale()));
         const stripTop = bottom + STRIP_GAP;
         layoutStrip(places, stripTop);
         return { places, stripTop };
@@ -1105,7 +1148,8 @@
         const drawn = map.columns.flatMap((column) =>
           column.blocks.map((block) => ({ block, lane: column.lane })),
         );
-        [...drawn, ...map.strip.map((block) => ({ block, lane: "outside" }))].forEach(
+        const core = map.core ? [{ block: map.core, lane: "core" }] : [];
+        [...drawn, ...core, ...map.strip.map((block) => ({ block, lane: "outside" }))].forEach(
           ({ block, lane }) => {
             const place = places.get(block.id);
             root.append(blockNode(block, lane, place, broken.has(block.id), lit.has(block.id)));
@@ -1134,9 +1178,10 @@
 
       function laneRows() {
         const hues = map.columns.map((column) => keyRow(swatch(column.lane), column.title));
+        const core = map.core ? [keyRow(swatch("core"), "Core")] : [];
         const strip =
           map.strip.length > 0 ? [keyRow(swatch("outside"), "Outside the groups")] : [];
-        return [...hues, ...strip];
+        return [...hues, ...core, ...strip];
       }
 
       // Which kind of test checks an adapter follows from its lane (`rules.feature`), so the key
@@ -1241,7 +1286,11 @@
       // a block is what the block leans on outside this repository. That is answered here, on
       // selection, rather than in a panel that is always open and always mostly irrelevant.
       function blockAt(id) {
-        const drawn = [...map.columns.flatMap((column) => column.blocks), ...map.strip];
+        const drawn = [
+          ...map.columns.flatMap((column) => column.blocks),
+          ...(map.core ? [map.core] : []),
+          ...map.strip,
+        ];
         return drawn.find((block) => block.id === id);
       }
 

@@ -126,7 +126,9 @@ message naming what it found.
 Every target provides:
 
 - `src/infrastructure/staff`, `src/infrastructure/suppliers` and `src/adapters`, one block per
-  folder under each. A core, if it has one, is `src/core`. Nothing else sits directly in `src` or
+  folder under each. A core, if it has one, is `src/core`: the map draws it as one block, however
+  it is split inside, in a band under the staff and supplier columns, with no arrows to it, since
+  nearly everything uses it. Nothing else sits directly in `src` or
   `src/infrastructure` (rule 5) but what its language claims, below.
 - Its tests in the four folders above: `features/` always, and `entry-points/`, `core-tests/` and
   `contracts/` when it has tests of those kinds. Test code that uses code under `src` anywhere

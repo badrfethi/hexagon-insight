@@ -1,4 +1,4 @@
-import { type Block, blocksOf } from "./blocks.js";
+import { type Block, blocksOf, coreOf } from "./blocks.js";
 import type { CodeFile, Declaration, FeatureText, Model } from "./model.js";
 import { type OutsideBlock, outsideBlocks } from "./outside.js";
 import { type SharedTestFile, sharedTestFiles } from "./shared-tests.js";
@@ -16,6 +16,8 @@ import { testKinds } from "./test-kinds.js";
 export interface AnalysisContext {
   readonly model: Model;
   readonly blocks: readonly Block[];
+  /** The block of `src/core`, when there is one (`coreOf`): not in `blocks`, and not outside. */
+  readonly core: Block | undefined;
   /**
    * The catch-all blocks under the columns: every code file that belongs to no group and is not a
    * test, gathered by folder (`outside.ts`). They are kept apart from `blocks` because they are not
@@ -64,7 +66,8 @@ export function contextOf(model: Model): AnalysisContext {
     blocks.find((block) => path.startsWith(`${block.directory}/`));
   const tests = testKinds(model.rootEntries).map(({ folder }) => folder);
   const sharedTests = sharedTestFiles(compiled, tests);
-  const outside = outsideBlocks(listed, blocks, [
+  const core = coreOf(model.folders.find(({ path }) => path === "src")?.folders ?? []);
+  const outside = outsideBlocks(listed, core === undefined ? blocks : [...blocks, core], [
     ...tests.map((folder) => `${folder}/`),
     ...sharedTests.map(({ path }) => path),
   ]);
@@ -72,6 +75,7 @@ export function contextOf(model: Model): AnalysisContext {
   return {
     model,
     blocks,
+    core,
     outside,
     sharedTests,
     compiled,
