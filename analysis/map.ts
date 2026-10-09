@@ -1,19 +1,18 @@
 import { type Arrow, arrowsOf, incomingPortGroupsOf } from "./arrows.js";
 import type { Block, Column } from "./blocks.js";
 import { type Break, breaksOf } from "./breaks.js";
-import { type AnalysisContext, inFolder } from "./context.js";
-import type { CodeFile } from "./model.js";
+import { type AnalysisContext, inFolder, type Measure } from "./context.js";
 import type { OutsideBlock } from "./outside.js";
 
 /** The map itself, computed from the working tree for one load, and drawn as soon as it answers. */
 export interface InsightMap {
   /**
    * Left to right, and only those that hold a block. The core, when the target has a `src/core`, is
-   * a column of its one block between staff and suppliers (`coreOf`), so a map without one is the
-   * map it was before the core was drawn.
+   * a column between staff and suppliers with a block per file (`coreOf`), so a map without one is
+   * the map it was before the core was drawn.
    */
   readonly columns: readonly MapColumn[];
-  /** The row under the columns: the code that belongs to no group and is not a test (`outside.ts`). */
+  /** The row under the columns: every file, code or not, in no block, the core or Tests (`outside.ts`). */
   readonly strip: readonly BlockView[];
   /** Drawn only for a clicked block. */
   readonly arrows: readonly Arrow[];
@@ -53,7 +52,10 @@ export interface BlockView {
   readonly id: string;
   readonly name: string;
   readonly column: Column;
-  /** Non-blank, non-comment lines across the block's files. The block's area is drawn from it. */
+  /**
+   * Non-blank, non-comment lines across the block's files, and a strip file that is not code
+   * counts its non-blank lines (`Layout.tracked`). The block's area is drawn from it.
+   */
   readonly linesOfCode: number;
   /**
    * What the block depends on outside this repository — such as npm packages and `node:` modules,
@@ -96,7 +98,7 @@ export async function mapOf(context: AnalysisContext, root: string): Promise<Ins
 function columnsOf(context: AnalysisContext): readonly MapColumn[] {
   const lanes = new Map(context.blocks.map((block) => [block, lanesOf(context, block)] as const));
 
-  const core = context.core === undefined ? [] : [coreViewOf(context, context.core)];
+  const core = context.core.map((block) => sized(block, [context.file(block.directory)]));
 
   return LANES.map(({ lane, title }) => ({
     lane,
@@ -157,24 +159,16 @@ function viewOf(context: AnalysisContext, block: Block): BlockView {
   return sized(block, context.filesOf(block));
 }
 
-/** The core is in no group, so its files are those under its folder, read directly. */
-function coreViewOf(context: AnalysisContext, core: Block): BlockView {
-  return sized(
-    core,
-    context.compiled.filter((file) => file.path.startsWith(`${core.directory}/`)),
-  );
-}
-
 /** A catch-all block owns no directory, so its size is read from the files it gathered. */
 function outsideViewOf(context: AnalysisContext, block: OutsideBlock): BlockView {
   return sized(
     block,
-    block.files.map((path) => context.file(path)),
+    block.files.map((path) => context.measure(path)),
   );
 }
 
 /** Its size and externals, summed and unioned over its files. */
-function sized(block: Block, files: readonly CodeFile[]): BlockView {
+function sized(block: Block, files: readonly Measure[]): BlockView {
   return {
     id: block.id,
     name: block.name,

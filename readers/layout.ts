@@ -1,8 +1,16 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { posix } from "node:path";
 import { COLUMNS } from "../analysis/blocks.js";
-import type { FeatureText, FolderListing, GroupFolder, Layout } from "../analysis/model.js";
+import type {
+  FeatureText,
+  FolderListing,
+  GroupFolder,
+  Layout,
+  TrackedFile,
+} from "../analysis/model.js";
 import { KINDS } from "../analysis/test-kinds.js";
+import { ReadFailure } from "./read.js";
 
 /**
  * What is read from a target's folders, which is the same for every language (`analysis/model.ts`):
@@ -18,7 +26,43 @@ export function layoutOf(root: string): Layout {
       ({ folder }) => featuresIn(root, folder),
     ),
     folders: LISTED.map((path) => ({ path, folders: foldersIn(root, path) })),
+    tracked: trackedIn(root),
   };
+}
+
+/**
+ * Every file git lists, as the readers list their code (`typescript/files.ts`, `csharp/Listing.cs`):
+ * `--others --exclude-standard` adds files not committed yet and leaves out what git ignores. A
+ * target git cannot list has no files to account for, and so no model.
+ */
+function trackedIn(root: string): readonly TrackedFile[] {
+  let listed: string;
+
+  try {
+    listed = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    throw new ReadFailure(`git could not list the files of ${root}: ${(error as Error).message}`);
+  }
+
+  return [...new Set(listed.split("\0").filter((path) => path.length > 0))]
+    .sort()
+    .filter((path) => existsSync(posix.join(root, path)))
+    .map((path) => ({ path, lines: linesIn(readFileSync(posix.join(root, path))) }));
+}
+
+/** The non-blank lines of a file's bytes, the way code is counted less its comments; none in a binary. */
+function linesIn(bytes: Buffer): number {
+  return bytes.includes(0)
+    ? 0
+    : bytes
+        .toString("utf8")
+        .split(/\r?\n/)
+        .filter((line) => line.trim().length > 0).length;
 }
 
 /**

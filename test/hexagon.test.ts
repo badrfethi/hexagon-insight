@@ -57,8 +57,11 @@ test("the map draws each block in its lane, sized and with its externals", () =>
   ]);
 });
 
-test("the strip holds the code that is in no group and on no test", () => {
+test("the strip holds every file that is in no group's folder and on no test, code or not", () => {
+  // `src/adapters/order-queue/schema.sql` is not code, and is shown by its adapter.
   assert.deepEqual(map.strip, [
+    { id: "docs", name: "docs", column: "outside", linesOfCode: 4, externals: [] },
+    { id: "README.md", name: "README.md", column: "outside", linesOfCode: 5, externals: [] },
     { id: "src/index.ts", name: "src/index.ts", column: "outside", linesOfCode: 8, externals: [] },
     {
       id: "tools/report.ts",
@@ -70,7 +73,7 @@ test("the strip holds the code that is in no group and on no test", () => {
   ]);
 });
 
-test("a src/core is one block in a column between staff and suppliers, out of the strip and in no arrow", async () => {
+test("each file of a src/core is a block in a column between staff and suppliers, out of the strip and in no arrow", async () => {
   assert.equal(
     map.columns.some(({ lane }) => lane === "core"),
     false,
@@ -98,6 +101,19 @@ test("a src/core is one block in a column between staff and suppliers, out of th
           constructs: [],
           importedFiles: [],
         },
+        {
+          path: "src/core/enums/Side.ts",
+          listed: true,
+          compiled: true,
+          test: false,
+          linesOfCode: 3,
+          externals: [],
+          declares: [],
+          imports: [],
+          constructorParameterTypes: [],
+          constructs: [],
+          importedFiles: [],
+        },
       ],
     }),
     FIXTURE,
@@ -111,7 +127,8 @@ test("a src/core is one block in a column between staff and suppliers, out of th
     lane: "core",
     title: "Core",
     blocks: [
-      { id: "core", name: "core", column: "core", linesOfCode: 12, externals: ["decimal.js"] },
+      { id: "core/Money.ts", name: "Money.ts", column: "core", linesOfCode: 12, externals: ["decimal.js"] },
+      { id: "core/enums/Side.ts", name: "enums/Side.ts", column: "core", linesOfCode: 3, externals: [] },
     ],
   });
   assert.deepEqual(withCore.strip, map.strip);

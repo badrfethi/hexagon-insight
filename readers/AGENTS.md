@@ -14,9 +14,10 @@ the names at the target's root (`readerFor`: `tsconfig.check.json` is TypeScript
 
 `layout.ts` is what every reader shares, because the folders are the tool's and not a language's:
 the group and adapter folders and their entries, the names at the root, the folders directly in
-`src` and `src/infrastructure`, and the `.feature` texts in the test folders. A folder that is not
-there reads as empty: what is missing is a break for the rules to name, not a reason to stop. A
-reader adds the code facts (`Code` in the model) and, when it can measure them, the doors.
+`src` and `src/infrastructure`, the `.feature` texts in the test folders, and every file git lists
+with its non-blank lines (`Layout.tracked`), so a file no reader reads as code still has a home on
+the map. A folder that is not there reads as empty: what is missing is a break for the rules to
+name, not a reason to stop. A target git cannot list throws `ReadFailure`. A reader adds the code facts (`Code` in the model) and, when it can measure them, the doors.
 
 **A reader fails only when there is no model to give**: it throws `ReadFailure` (`read.ts`) for a
 target it cannot read at all, such as a project that will not load, and the run stops with that

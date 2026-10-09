@@ -37,6 +37,20 @@ export interface Layout {
    * folders.
    */
   readonly folders: readonly FolderListing[];
+  /**
+   * Every file git lists — committed or not yet, but not ignored — in path order, whatever its
+   * language: code, docs, configuration, data. Each has a home in the tool, so nothing in the
+   * repository is hidden: a file in a block's folder, the core or a test folder is shown by it, and
+   * any other is on the strip (`outside.ts`), where a file the reader holds no code facts for
+   * (`CodeFile`) is sized by its `lines`.
+   */
+  readonly tracked: readonly TrackedFile[];
+}
+
+export interface TrackedFile {
+  readonly path: string;
+  /** Its non-blank lines; 0 for a binary file, which has none. */
+  readonly lines: number;
 }
 
 export interface FolderListing {

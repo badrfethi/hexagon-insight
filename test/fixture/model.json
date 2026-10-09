@@ -73,6 +73,92 @@
       ]
     }
   ],
+  "tracked": [
+    {
+      "path": "README.md",
+      "lines": 5
+    },
+    {
+      "path": "docs/design.md",
+      "lines": 4
+    },
+    {
+      "path": "features/place-order.feature",
+      "lines": 11
+    },
+    {
+      "path": "features/support/clock.ts",
+      "lines": 5
+    },
+    {
+      "path": "features/support/doubles.ts",
+      "lines": 15
+    },
+    {
+      "path": "features/support/steps.ts",
+      "lines": 9
+    },
+    {
+      "path": "features/support/world.ts",
+      "lines": 14
+    },
+    {
+      "path": "fixtures/prices.ts",
+      "lines": 7
+    },
+    {
+      "path": "src/adapters/order-queue/order-queue.ts",
+      "lines": 18
+    },
+    {
+      "path": "src/adapters/order-queue/schema.sql",
+      "lines": 6
+    },
+    {
+      "path": "src/adapters/simulated-exchange/simulated-exchange.ts",
+      "lines": 20
+    },
+    {
+      "path": "src/adapters/web-api/web-api.ts",
+      "lines": 30
+    },
+    {
+      "path": "src/index.ts",
+      "lines": 8
+    },
+    {
+      "path": "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts",
+      "lines": 3
+    },
+    {
+      "path": "src/infrastructure/staff/orders/services/OrderPlacer.ts",
+      "lines": 12
+    },
+    {
+      "path": "src/infrastructure/suppliers/exchange/outgoing_ports/IExchange.ts",
+      "lines": 4
+    },
+    {
+      "path": "tests/contracts/OrderQueueTests.ts",
+      "lines": 9
+    },
+    {
+      "path": "tests/contracts/exchange.feature",
+      "lines": 4
+    },
+    {
+      "path": "tests/contracts/support/exchange.steps.ts",
+      "lines": 10
+    },
+    {
+      "path": "tests/entry-points/OrderQueueEntryTests.ts",
+      "lines": 8
+    },
+    {
+      "path": "tools/report.ts",
+      "lines": 6
+    }
+  ],
   "files": [
     {
       "path": "src/infrastructure/staff/orders/incoming_ports/IPlaceOrder.ts",

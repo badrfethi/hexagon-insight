@@ -135,15 +135,21 @@ message naming what it found.
 Every target provides:
 
 - `src/infrastructure/staff`, `src/infrastructure/suppliers` and `src/adapters`, one block per
-  folder under each. A core, if it has one, is `src/core`: the map draws it as one block, however
-  it is split inside, in a column of its own between staff and suppliers, with no arrows to it,
-  since nearly everything uses it. Nothing else sits directly in `src` or
-  `src/infrastructure` (rule 5) but what its language claims, below.
+  folder under each. A core, if it has one, is `src/core`: the map draws a block for each of its
+  files, at any depth, since every file the staff stand on matters on its own, in a column of its
+  own between staff and suppliers, with no arrows to it, since nearly everything uses it. Nothing
+  else sits directly in `src` or `src/infrastructure` (rule 5) but what its language claims, below.
 - Its tests in the four folders above: `features/` always, and `tests/entry-points/`,
   `tests/core/` and `tests/contracts/` when it has tests of those kinds. Test code that uses code
-  under `src` anywhere else is a break (rule 5). Test code is drawn on Tests, never on the map's
-  strip of code outside the groups.
-- `git`, to list the files outside the hexagon, and Node with the package installed as above.
+  under `src` anywhere else is a break (rule 5).
+- `git`, to list every file, and Node with the package installed as above.
+
+Every file git lists has a home, code or not. A file in a group's or an adapter's folder is that
+block's, one in `src/core` the core's, and one in a test folder is on Tests. Every other file is
+on the map's strip of what belongs to no group, gathered by folder, test code outside the test
+folders included: `README.md`, `docs`, a `Dockerfile`, a tool. A strip block is sized like any
+other, a code file by its non-blank, non-comment lines and any other file by its non-blank lines,
+and lists the packages its code uses.
 
 A **TypeScript** target also provides:
 

@@ -5,16 +5,16 @@ import type { Block } from "./blocks.js";
  *
  * The operator must be able to see everything, and every other block on the map is a group, an
  * adapter, so without this row `src/index.ts`, `src/config.ts` and the tools themselves would
- * appear nowhere. The row is a **catch-all, gathered by construction**: every code file the
- * repository lists is either inside a block, drawn on Tests — in a suite's folder, or a file only
- * the suites import (`tests.ts`, `shared-tests.ts`) — or inside one of these, so something unfamiliar showing up here is a finding about
- * the design rather than a gap in the map.
+ * appear nowhere. The row is a **catch-all, gathered by construction**: every file git lists, code
+ * or not (`Layout.tracked`), is either inside a block, a file of the core, drawn on Tests — in a
+ * suite's folder, or a file only the suites import (`tests.ts`, `shared-tests.ts`) — or inside one
+ * of these, so something unfamiliar showing up here is a finding about the design rather than a
+ * gap in the map.
  *
- * So there is no list of the blocks to keep up to date. The files are those the reader lists as
- * code (`CodeFile.listed`) — for the TypeScript reader, what git tracks and does not ignore, which
- * leaves out `node_modules/`, `dist/` and a run's media — and each is gathered under the folder it
- * sits in (`outsideId`). A file that fits no grouping becomes a block of its own under its own
- * path; nothing is dropped.
+ * So there is no list of the blocks to keep up to date. The files are what git tracks and does not
+ * ignore, which leaves out `node_modules/`, `dist/` and a run's media, and each is gathered under
+ * the folder it sits in (`outsideId`). A file that fits no grouping becomes a block of its own
+ * under its own path; nothing is dropped.
  */
 export interface OutsideBlock extends Block {
   /** Its files, relative to the root, in path order. It owns no directory. */
@@ -22,7 +22,7 @@ export interface OutsideBlock extends Block {
 }
 
 /**
- * `listed` is every code file the reader lists, in path order. `onTests` is what Tests draws,
+ * `listed` is every file git lists but the core's, in path order. `onTests` is what Tests draws,
  * relative to the root: each suite's folder with its trailing slash, and each file the suites
  * share. It is left off the map rather than drawn twice.
  */
