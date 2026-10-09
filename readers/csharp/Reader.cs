@@ -14,8 +14,9 @@ namespace HexagonInsight.CSharp;
  * Everything C#-shaped about the target is decided here and nowhere in the hexagon part: that a
  * project with `<OutputType>Exe</OutputType>` under `src/` wires the application, so its files are
  * the composition roots and its folder is claimed beside the hexagon's; that every file of a test
- * project is test code; that `bin/` and `obj/` are build output, not the target's code; and what a
- * type's facts are, read through Roslyn's semantic model:
+ * project is test code; that `bin/` and `obj/` are build output, not the target's code; what a
+ * Reqnroll suite builds for every scenario and which steps go with which feature (`Worlds`); and
+ * what a type's facts are, read through Roslyn's semantic model:
  *
  * - **imports**: the target's own types a file names, each once, in the order first named — C#
  *   imports namespaces, so the names a file uses are what TypeScript's named imports are. A type
@@ -80,7 +81,7 @@ internal static partial class Reader
             [.. files.Values.OrderBy(file => file.Path, StringComparer.Ordinal)],
             [.. registry.All.OrderBy(declaration => declaration.Id, StringComparer.Ordinal)],
             [.. sources.Where(source => exes.Contains(source.Project)).Select(source => source.Path).Order(StringComparer.Ordinal)],
-            [],
+            Worlds.StepsPairs(sources, listed),
             [.. exes.Where(IsClaimable).Order(StringComparer.Ordinal)]);
     }
 

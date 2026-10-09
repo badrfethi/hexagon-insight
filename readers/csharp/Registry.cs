@@ -15,10 +15,12 @@ internal sealed class Registry
     private readonly Dictionary<SyntaxTree, Reader.Source> _sources;
     private readonly Dictionary<ISymbol, string> _ids = new(SymbolEqualityComparer.Default);
     private readonly Dictionary<string, Declaration> _declarations = [];
+    private readonly HashSet<INamedTypeSymbol> _worlds;
 
     public Registry(IReadOnlyList<Reader.Source> sources)
     {
         this._sources = sources.ToDictionary(source => source.Tree);
+        this._worlds = Worlds.Find(sources);
 
         foreach (Reader.Source source in sources)
         {
@@ -91,7 +93,7 @@ internal sealed class Registry
             line,
             symbol.DeclaredAccessibility == Accessibility.Public,
             kind == "class" ? this.ImplementsOf(symbol) : [],
-            [],
+            this._worlds.Contains(symbol) ? Worlds.BuiltBy(this, this._sources, symbol) : [],
             Facts.DocOf(node),
             kind == "class" ? Lines.CodeLinesOf(node) : 0);
     }

@@ -80,7 +80,9 @@ export interface Code {
   readonly compositionRoots: readonly string[];
   /**
    * Each steps file, and the feature it is the steps of, whether or not that feature exists. The
-   * TypeScript reader pairs `<folder>/support/<name>.steps.ts` with `<folder>/<name>.feature`.
+   * TypeScript reader pairs `<folder>/support/<name>.steps.ts` with `<folder>/<name>.feature`; the
+   * C# reader pairs a `[Binding]` class `<Name>Steps` under `<folder>/support/` with
+   * `<folder>/<Name>.feature`.
    */
   readonly steps: readonly StepsPair[];
   /**
@@ -140,7 +142,7 @@ export interface Declaration {
   /**
    * Ids of the classes a test suite's world builds for every scenario, when this class is that
    * world; empty for every other class. The TypeScript reader reads the fields of a class that
-   * extends cucumber's `World`.
+   * extends cucumber's `World`; the C# reader, what Reqnroll builds per scenario (`Worlds.cs`).
    */
   readonly buildsPerScenario: readonly string[];
   /** The text of its doc comment, empty when it has none: a Test Double names its kinds in it. */

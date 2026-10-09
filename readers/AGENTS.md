@@ -75,7 +75,11 @@ and `csharp/read.ts`, which builds it and runs it. It ships as source, like the 
 - It restores the solution before it opens it: without the restore, MSBuild resolves no package and
   no project reference a project only reaches through another, and Roslyn binds too few names
   without saying so.
-- It measures no doors yet.
+- `Worlds.cs` reads what a Reqnroll suite builds for every scenario — a class a `[Binding]` takes in
+  its constructor, or a `[Binding]` with a `[BeforeScenario]` hook — and pairs a `[Binding]` class
+  `<Name>Steps` under `<folder>/support/` with `<folder>/<Name>.feature`.
+- It measures no doors yet (#16): one scenario under coverage takes about 43 s on crypto-trader, so
+  Rule 4 breaks on a C# target saying no doors were measured.
 
 `pnpm test` does not run it: it needs the .NET SDK and takes about a minute on a real target. A
 change to it is checked on a C# target by hand, with `hexagon-insight rules` and `serve`.

@@ -5,7 +5,7 @@ namespace HexagonInsight.CSharp;
  * The fields mean what they mean there; each record's doc says only what is C#'s about it.
  */
 
-/** `Code`: everything the reader reads from a target's code. `steps` is empty: C# has no pairing yet. */
+/** `Code`: everything the reader reads from a target's code. `steps` pairs by `Worlds.StepsPairs`. */
 internal sealed record Code(
     IReadOnlyList<CodeFile> Files,
     IReadOnlyList<Declaration> Declarations,

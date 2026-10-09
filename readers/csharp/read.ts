@@ -40,7 +40,8 @@ const MAX_BUFFER = 256 * 1024 * 1024;
  * each a `ReadFailure`, naming what `dotnet` said.
  *
  * It measures no doors: a door is the class a scenario reaches the hexagon through, and C# features
- * run under Reqnroll, which this reader does not run yet. The rules say so as a break.
+ * run under Reqnroll, which this reader does not run yet: one scenario under coverage takes about
+ * 43 s on crypto-trader (#16). The rules say so as a break.
  */
 export async function readCSharp(root: string, solution: string): Promise<Code> {
   await dotnet(
