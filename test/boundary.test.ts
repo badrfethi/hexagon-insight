@@ -59,9 +59,20 @@ test("the hexagon part imports no compiler, and no reader but the front door", (
 test("the front door and the layout load no language's reader with them", () => {
   const offences = ["readers/read.ts", "readers/layout.ts"].flatMap((path) =>
     staticImportsOf(path)
-      .filter((name) => name === "typescript" || name.startsWith("./typescript/"))
+      .filter(
+        (name) =>
+          name === "typescript" || name.startsWith("./typescript/") || name.startsWith("./csharp/"),
+      )
       .map((name) => `${path} imports ${name}`),
   );
+
+  assert.deepEqual(offences, []);
+});
+
+test("the C# reader loads no TypeScript compiler", () => {
+  const offences = importsOf("readers/csharp/read.ts")
+    .filter((name) => name === "typescript" || name.includes("typescript/"))
+    .map((name) => `readers/csharp/read.ts imports ${name}`);
 
   assert.deepEqual(offences, []);
 });
@@ -70,11 +81,16 @@ test("a target with tsconfig.check.json is read as TypeScript", () => {
   assert.equal(readerFor(["src", "tsconfig.check.json", "package.json"]), "typescript");
 });
 
-test("a target with a solution is C#, which no reader reads yet", () => {
-  assert.throws(() => readerFor(["CryptoTrader.slnx", "src"]), {
-    message: "Found CryptoTrader.slnx: this is a C# target, and the C# reader is not available yet (#6)",
+test("a target with one solution is read as C#", () => {
+  assert.equal(readerFor(["CryptoTrader.slnx", "src"]), "csharp");
+  assert.equal(readerFor(["CryptoTrader.sln"]), "csharp");
+});
+
+test("a C# target with two solutions is refused, naming both", () => {
+  assert.throws(() => readerFor(["App.sln", "App.slnx"]), {
+    name: "ReadFailure",
+    message: /^Found App\.sln, App\.slnx: this C# target has more than one solution/,
   });
-  assert.throws(() => readerFor(["CryptoTrader.sln"]), /C# reader is not available yet/);
 });
 
 test("a target that is both, or neither, is refused, naming what was found", () => {

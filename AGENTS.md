@@ -11,8 +11,9 @@ work in them.
 
 - **A reader** (`readers/`) reads a target in its own language and reports the facts the hexagon
   rests on: which files and declarations there are, what each imports, takes, constructs and
-  implements, line counts, externals, and the door each scenario comes in by. Only the TypeScript
-  reader exists; the C# one is #6.
+  implements, line counts, externals, and the door each scenario comes in by. There are two: the
+  TypeScript reader (`readers/typescript/`) and the C# one (`readers/csharp/`, a .NET program over
+  Roslyn).
 - **The hexagon part** (`analysis/`, `steps/`, `server.ts`, `page.html`) makes the map, the Tests
   view and the rules out of those facts, the same way for every language.
 - **`analysis/model.ts` is the line between them**, and the only thing a reader emits. The hexagon
@@ -27,7 +28,7 @@ change to what the tool outputs is a deliberate one, named in its PR. The three 
 `analysis/blocks.ts` started as clipper's and are now the tool's, held by the layout rule (#5,
 `rules.feature` Rule 5). The TypeScript-only conventions — `src/index.ts` as the composition root in
 `readers/typescript/read.ts`, the production service folder in `readers/typescript/doors/doors.ts`
-— stay in the TypeScript reader; the C# reader (#6) brings its own.
+— stay in the TypeScript reader; the C# reader (`readers/csharp/Reader.cs`) brings its own.
 
 **Issue and ADR numbers in the JSDoc (`#74`, `ADR-0023`) are clipper's**: badrfethi/clipper and its
 `docs/adr/`. Most of the reasoning lives in that JSDoc; read it before changing a function, and

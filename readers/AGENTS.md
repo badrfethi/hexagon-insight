@@ -39,7 +39,8 @@ takes a suite's world to be the class extending cucumber's `World`, lists files 
 
 Two facts let a language keep what it needs beside the hexagon's folders without the hexagon part
 knowing the language: `claimed` names the folders directly in `src` or `src/infrastructure` the
-reader's language needs there (the TypeScript reader claims none), and `test` on a file says it is
+reader's language needs there (the TypeScript reader claims none; the C# reader claims the
+folder of each `Exe` project there), and `test` on a file says it is
 test code, however the language tells. The layout rule reads both.
 
 Paths are relative to the target's root, with `/`. Ids of declarations are `<file>#<name>`, with
@@ -50,6 +51,34 @@ Paths are relative to the target's root, with `/`. Ids of declarations are `<fil
 `typescript/read.ts` builds one program over `tsconfig.check.json` and reads every model fact from
 it. `typescript/doors/` measures the doors by running each feature under V8 coverage; its scripts
 are found by URL relative to their own files, so they move together.
+
+## The C# reader
+
+`csharp/` is a .NET console program (`HexagonInsight.CSharp.csproj`, Roslyn's `MSBuildWorkspace`)
+and `csharp/read.ts`, which builds it and runs it. It ships as source, like the rest of the tool:
+
+- `read.ts` runs `dotnet build` with `--artifacts-path` in the system's temp folder, one per copy
+  of the tool, so neither the package nor the target gets a `bin/` or `obj/`, and a second run
+  builds nothing. It then runs the program, `HexagonInsight.CSharp <root> <solution>`, which writes
+  the `Code` facts as JSON to standard output.
+- The program exits 3 with the reason on standard error for a `ReadFailure` (a solution that will
+  not restore or load, git that will not list files), and `read.ts` passes that reason on as its
+  own `ReadFailure`. No `dotnet` on the `PATH`, and a reader that will not build, are read failures
+  too.
+- The empty `Directory.Build.props`, `Directory.Build.targets` and `Directory.Packages.props` stop
+  MSBuild from walking up into the target's own: installed, this folder is inside the target, and
+  the target's analyzers, warnings-as-errors and central package versions are not the reader's.
+- `Reader.cs` says what each fact is in C#; `Registry.cs` gives each type its id; `Facts.cs` reads a
+  file's facts through the semantic model; `Listing.cs` lists files with git, as
+  `typescript/files.ts` does; `Lines.cs` counts lines of code; `Model.cs` mirrors
+  `../analysis/model.ts`, and changes with it.
+- It restores the solution before it opens it: without the restore, MSBuild resolves no package and
+  no project reference a project only reaches through another, and Roslyn binds too few names
+  without saying so.
+- It measures no doors yet.
+
+`pnpm test` does not run it: it needs the .NET SDK and takes about a minute on a real target. A
+change to it is checked on a C# target by hand, with `hexagon-insight rules` and `serve`.
 
 ## Output stays byte for byte
 

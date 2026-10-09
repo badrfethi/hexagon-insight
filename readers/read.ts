@@ -8,7 +8,8 @@ import { layoutOf } from "./layout.js";
  * only part of `readers/` the hexagon part imports.
  *
  * The reader is told by the files at the target's root (`readerFor`), and reached only by a
- * dynamic `import()`, so a target in another language never loads a TypeScript compiler.
+ * dynamic `import()`, so a C# target never loads a TypeScript compiler, and a TypeScript one never
+ * starts `dotnet`.
  *
  * A target that cannot be read into a model at all fails with a `ReadFailure`, which names why.
  *
@@ -24,7 +25,14 @@ export async function readModel(root: string): Promise<Model> {
     return JSON.parse(readFileSync(resolve(normalRoot, written), "utf8")) as Model;
   }
 
-  readerFor(readdirSync(normalRoot));
+  const names = readdirSync(normalRoot);
+
+  if (readerFor(names) === "csharp") {
+    const { readCSharp } = await import("./csharp/read.js");
+
+    return { ...layoutOf(normalRoot), ...(await readCSharp(normalRoot, names.find(isSolution)!)) };
+  }
+
   const { readTypeScript } = await import("./typescript/read.js");
 
   return { ...layoutOf(normalRoot), ...readTypeScript(normalRoot) };
@@ -53,16 +61,16 @@ export class ReadFailure extends Error {
 }
 
 /** The readers there are, by the folder under `readers/` each is in. */
-export type Reader = "typescript";
+export type Reader = "typescript" | "csharp";
 
 /**
  * Which reader a target needs, from the names at its root: `tsconfig.check.json` is a TypeScript
- * target, and a `*.sln` or `*.slnx` a C# one. One that is both, or neither, is refused, naming what
- * was found: guessing would draw half a target as if it were all of it.
+ * target, and a `*.sln` or `*.slnx` a C# one. One that is both, or neither, or has two solutions,
+ * is refused, naming what was found: guessing would draw half a target as if it were all of it.
  */
 export function readerFor(names: readonly string[]): Reader {
   const typescript = names.filter((name) => name === "tsconfig.check.json");
-  const csharp = names.filter((name) => /\.slnx?$/.test(name));
+  const csharp = names.filter(isSolution);
 
   if (typescript.length > 0 && csharp.length > 0) {
     throw new ReadFailure(
@@ -71,10 +79,15 @@ export function readerFor(names: readonly string[]): Reader {
     );
   }
 
-  if (csharp.length > 0) {
+  if (csharp.length > 1) {
     throw new ReadFailure(
-      `Found ${csharp.join(", ")}: this is a C# target, and the C# reader is not available yet (#6)`,
+      `Found ${csharp.join(", ")}: this C# target has more than one solution, and insight reads ` +
+        "a target through one",
     );
+  }
+
+  if (csharp.length === 1) {
+    return "csharp";
   }
 
   if (typescript.length === 0) {
@@ -85,6 +98,10 @@ export function readerFor(names: readonly string[]): Reader {
   }
 
   return "typescript";
+}
+
+function isSolution(name: string): boolean {
+  return /\.slnx?$/.test(name);
 }
 
 function normal(path: string): string {

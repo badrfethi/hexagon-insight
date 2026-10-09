@@ -119,17 +119,41 @@ dependency run for real, and the Tests view draws it as real.
 
 ## What the target provides
 
-- `tsconfig.check.json` at its root: one TypeScript program over everything insight should read
-  (`src` and the test folders). It is also how insight knows the target is TypeScript: a `*.sln` or
-  `*.slnx` at the root marks a C# target, which insight does not read yet, and a root with both, or
-  with neither, is refused with a message naming what it found.
+Insight tells the target's language by its root: `tsconfig.check.json` is TypeScript, and one
+`*.sln` or `*.slnx` is C#. A root with both, with neither, or with two solutions is refused with a
+message naming what it found.
+
+Every target provides:
+
 - `src/infrastructure/staff`, `src/infrastructure/suppliers` and `src/adapters`, one block per
-  folder under each, and `src/index.ts` as the composition root. A core, if it has one, is
-  `src/core`. Nothing else sits directly in `src` or `src/infrastructure` (rule 5).
+  folder under each. A core, if it has one, is `src/core`. Nothing else sits directly in `src` or
+  `src/infrastructure` (rule 5) but what its language claims, below.
 - Its tests in the four folders above: `features/` always, and `entry-points/`, `core-tests/` and
-  `contracts/` when it has tests of those kinds. A file is test code when it imports a test runner
-  (`@cucumber/cucumber`, `node:test`, `vitest`, `jest`, `@jest/globals` or `mocha`); test code
-  that uses code under `src` anywhere else is a break (rule 5).
+  `contracts/` when it has tests of those kinds. Test code that uses code under `src` anywhere
+  else is a break (rule 5).
+- `git`, to list the files outside the hexagon, and Node with the package installed as above.
+
+A **TypeScript** target also provides:
+
+- `tsconfig.check.json` at its root: one TypeScript program over everything insight should read
+  (`src` and the test folders).
+- `src/index.ts` as the composition root.
+- A file is test code when it imports a test runner (`@cucumber/cucumber`, `node:test`, `vitest`,
+  `jest`, `@jest/globals` or `mocha`).
 - A cucumber `default` profile running `features/**/*.feature`; insight runs each feature under it
   to measure doors.
-- `git`, to list the files outside the hexagon.
+
+A **C#** target also provides:
+
+- One solution at its root, `*.sln` or `*.slnx`. Insight reads every project it loads, and every
+  project those reference, through Roslyn, and restores the solution first (`dotnet restore`,
+  which writes each project's `obj/`, as a build does), so its packages must be restorable.
+- The .NET SDK 10 or later on the `PATH`. Insight builds its reader with it on first use, into the
+  system's temp folder.
+- The composition root is the project with `<OutputType>Exe</OutputType>` directly in `src`, such
+  as `src/App.Main`: its files are the composition roots, and its folder may sit beside the
+  hexagon's (rule 5).
+- A file is test code when its project is a test project: it says `<IsTestProject>`, or it
+  references the test SDK, Reqnroll, xUnit, NUnit or MSTest.
+- `node_modules` in its `.gitignore`, since it is a C# repository that now has one.
+- Insight does not measure the doors of a C# target yet, which the rules report as a break.

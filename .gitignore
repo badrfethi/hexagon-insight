@@ -4,3 +4,5 @@ node_modules/
 Thumbs.db
 .claude/worktrees/
 test/.runs/
+readers/csharp/bin/
+readers/csharp/obj/

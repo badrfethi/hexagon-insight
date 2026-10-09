@@ -1,0 +1,7 @@
+<Project>
+  <!--
+    Stops MSBuild's search upward: installed, this project sits in the target's node_modules, and
+    the target's own Directory.Build.props (its analyzers, its references) are not the reader's.
+    Directory.Build.targets and Directory.Packages.props beside it do the same for theirs.
+  -->
+</Project>
