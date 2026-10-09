@@ -30,6 +30,18 @@ export interface Layout {
   readonly rootEntries: readonly string[];
   /** Every `.feature` file directly in a kind of test's folder (`test-kinds.ts`), with its text. */
   readonly features: readonly FeatureText[];
+  /**
+   * The folders directly in `src` and in `src/infrastructure`, which the layout rule holds to the
+   * hexagon's own names (`rules.feature`, Rule 5). A path that is not there lists no folders.
+   */
+  readonly folders: readonly FolderListing[];
+}
+
+export interface FolderListing {
+  /** `src` or `src/infrastructure`. */
+  readonly path: string;
+  /** The names of the folders directly in it, sorted; files are not listed. */
+  readonly folders: readonly string[];
 }
 
 export interface GroupFolder {
@@ -69,6 +81,13 @@ export interface Code {
    * TypeScript reader pairs `<folder>/support/<name>.steps.ts` with `<folder>/<name>.feature`.
    */
   readonly steps: readonly StepsPair[];
+  /**
+   * The folders directly in `src` or `src/infrastructure` that the reader claims as its language's
+   * own, beside the hexagon's folders: the layout rule lets them be. The C# reader claims the
+   * project that wires the application. The TypeScript reader claims none: its composition root is
+   * loose files in `src/`, and the layout rule reads only folders.
+   */
+  readonly claimed: readonly string[];
 }
 
 export interface CodeFile {
@@ -77,6 +96,11 @@ export interface CodeFile {
   readonly listed: boolean;
   /** The reader compiles it: its declarations, imports and constructions below are read. */
   readonly compiled: boolean;
+  /**
+   * It is test code, by its language's measure: the TypeScript reader takes a file that imports a
+   * test runner. Test code that uses the application's code lives in a test folder (Rule 5).
+   */
+  readonly test: boolean;
   /** Its non-blank, non-comment lines, which is what a block's size is drawn from. */
   readonly linesOfCode: number;
   /**

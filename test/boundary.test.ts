@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -79,7 +80,33 @@ test("a target with a solution is C#, which no reader reads yet", () => {
 test("a target that is both, or neither, is refused, naming what was found", () => {
   assert.throws(
     () => readerFor(["tsconfig.check.json", "Tools.sln"]),
-    /^Error: Found tsconfig\.check\.json, Tools\.sln: this target is both TypeScript and C#/,
+    {
+      name: "ReadFailure",
+      message: /^Found tsconfig\.check\.json, Tools\.sln: this target is both TypeScript and C#/,
+    },
   );
-  assert.throws(() => readerFor(["package.json", "tsconfig.json"]), /Found neither tsconfig\.check\.json/);
+  assert.throws(() => readerFor(["package.json", "tsconfig.json"]), {
+    name: "ReadFailure",
+    message: /Found neither tsconfig\.check\.json/,
+  });
+});
+
+test("rules exits 2, saying why, when the target cannot be read into a model", () => {
+  const root = join(ROOT, "test", ".runs", "unread");
+  const { INSIGHT_MODEL: _, ...env } = process.env;
+
+  mkdirSync(root, { recursive: true });
+
+  try {
+    const run = spawnSync(process.execPath, [join(ROOT, "bin", "hexagon-insight.js"), "rules"], {
+      cwd: root,
+      env,
+      encoding: "utf8",
+    });
+
+    assert.equal(run.status, 2);
+    assert.match(run.stderr, /^insight: Found neither tsconfig\.check\.json/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

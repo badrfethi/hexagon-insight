@@ -65,3 +65,26 @@ Feature: The hexagon's rules
     Scenario: every scenario under "features" comes in through an incoming port
       Given the scenarios under "features"
       Then each of them came in through an incoming port
+
+  Rule: A target is laid out in the hexagon's folders
+    A target keeps its code in the tool's folders: staff and supplier groups under
+    `src/infrastructure`, adapters under `src/adapters`, and the core, if it has one, in `src/core`.
+    A language's reader may claim what its language needs beside them, such as the project that
+    wires the application. Any other folder there is one the hexagon does not have. Test code that
+    uses the application's code lives in one of the four test folders.
+
+    Scenario: the hexagon's folders are there
+      Given the target's root
+      Then it has "src/infrastructure/staff", "src/infrastructure/suppliers", "src/adapters" and "features"
+
+    Scenario: nothing else sits in "src"
+      Given the folders directly under "src"
+      Then each of them is "infrastructure", "adapters" or "core", or is claimed by the target's reader
+
+    Scenario: nothing else sits in "src/infrastructure"
+      Given the folders directly under "src/infrastructure"
+      Then each of them is "staff" or "suppliers", or is claimed by the target's reader
+
+    Scenario: test code that uses the application lives in a test folder
+      Given the test code that uses code under "src"
+      Then each of it is under "entry-points", "features", "core-tests" or "contracts"

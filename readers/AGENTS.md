@@ -13,9 +13,15 @@ the names at the target's root (`readerFor`: `tsconfig.check.json` is TypeScript
 `layout.ts` imports a reader statically (`../test/boundary.test.ts`).
 
 `layout.ts` is what every reader shares, because the folders are the tool's and not a language's:
-the group and adapter folders and their entries, the names at the root, and the `.feature` texts in
-the test folders. A reader adds the code facts (`Code` in the model) and, when it can measure them,
-the doors.
+the group and adapter folders and their entries, the names at the root, the folders directly in
+`src` and `src/infrastructure`, and the `.feature` texts in the test folders. A folder that is not
+there reads as empty: what is missing is a break for the rules to name, not a reason to stop. A
+reader adds the code facts (`Code` in the model) and, when it can measure them, the doors.
+
+**A reader fails only when there is no model to give**: it throws `ReadFailure` (`read.ts`) for a
+target it cannot read at all, such as a project that will not load, and the run stops with that
+message (`../README.md`, _Breaks and read failures_). Anything less — a missing folder, code that
+does not compile, a file it cannot resolve — it reports as far as it can and leaves to the rules.
 
 ## A reader emits facts, not conclusions
 
@@ -27,8 +33,14 @@ other readers will compute differently.
 
 Its conventions are its language's, and stay in it: the TypeScript reader takes `src/index.ts` as
 the composition root, pairs `<folder>/support/<name>.steps.ts` with `<folder>/<name>.feature`,
-takes a suite's world to be the class extending cucumber's `World`, and lists files with git
-(`typescript/files.ts`).
+takes a suite's world to be the class extending cucumber's `World`, lists files with git
+(`typescript/files.ts`), and marks a file as test code when it imports a test runner
+(`TEST_RUNNERS` in `typescript/read.ts`).
+
+Two facts let a language keep what it needs beside the hexagon's folders without the hexagon part
+knowing the language: `claimed` names the folders directly in `src` or `src/infrastructure` the
+reader's language needs there (the TypeScript reader claims none), and `test` on a file says it is
+test code, however the language tells. The layout rule reads both.
 
 Paths are relative to the target's root, with `/`. Ids of declarations are `<file>#<name>`, with
 `@<line>` added when a file declares a name twice.

@@ -2,12 +2,12 @@ import { join, sep } from "node:path";
 import { setDefaultTimeout, setWorldConstructor, World } from "@cucumber/cucumber";
 import type { Block } from "../analysis/blocks.js";
 import { type AnalysisContext, contextOf } from "../analysis/context.js";
-import type { ScenarioDoor } from "../analysis/model.js";
-import { readModel } from "../readers/read.js";
+import type { CodeFile, ScenarioDoor } from "../analysis/model.js";
+import { readOnce } from "../readers/read.js";
 
 /**
- * What a `Given` of the rules (`analysis/rules.ts`) hands to its `Then`: the groups or adapters a rule
- * is about, and which way those adapters face.
+ * What a `Given` of the rules (`analysis/rules.ts`) hands to its `Then`: the groups, adapters,
+ * scenarios, folders or files a rule is about, and which way those adapters face.
  *
  * The rules read the same model the map draws (#86: "no second parser"; `analysis/model.ts`).
  * Reading it compiles the whole repository, so it is read once for the run and shared by every
@@ -20,10 +20,14 @@ export class RulesWorld extends World {
   direction = "";
   /** The scenarios a rule is about, each with the door it was measured to come in (`Model.doors`). */
   scenarios: readonly ScenarioDoor[] = [];
+  /** The folders a layout rule is about, relative to the root (`layout.steps.ts`). */
+  folders: readonly string[] = [];
+  /** The files a layout rule is about (`layout.steps.ts`). */
+  files: readonly CodeFile[] = [];
 
   /** Reads the target, or waits for the read another scenario started. */
   async read(): Promise<void> {
-    reading ??= readModel(ROOT).then(contextOf);
+    reading ??= readOnce(ROOT).then(contextOf);
     shared = await reading;
   }
 

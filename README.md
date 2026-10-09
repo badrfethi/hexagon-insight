@@ -45,8 +45,9 @@ Then add the two commands to the target's `package.json`:
   with `/map.json` and `/tests.json` behind it. Nothing is cached: every load reads the working
   tree as it is, runs the features and the rules again.
 - `hexagon-insight rules` runs the hexagon's rules (this package's `rules.feature`) over the target,
-  prints `progress` and `summary`, and exits non-zero when a rule breaks. A break is something to
-  look at, not a gate: keep it out of CI.
+  prints `progress` and `summary`, and exits 1 when a rule breaks, and 2 when the target cannot be
+  read at all (_Breaks and read failures_). A break is something to look at, not a gate: keep it
+  out of CI.
 
 ## The rules
 
@@ -62,6 +63,24 @@ not read:
    incoming port, and outgoing otherwise.
 4. Every acceptance scenario under `features/` comes in through an incoming port, measured by
    running it.
+5. A target is laid out in the hexagon's folders: `src/infrastructure/staff`,
+   `src/infrastructure/suppliers`, `src/adapters` and `features/` are there; nothing sits directly
+   in `src` but `infrastructure`, `adapters` and `core`, nor in `src/infrastructure` but `staff`
+   and `suppliers`, unless the target's reader claims it for its language; and test code that uses
+   code under `src` lives in one of the four test folders.
+
+## Breaks and read failures
+
+The tool is for repositories still finding the hexagon's shape, so a target that gets the shape
+wrong is still drawn and checked, and what is wrong is a **break**: a design flaw, named by a rule,
+shown on the page, and the reason `rules` exits 1. A missing folder, a folder the hexagon does not
+have, test code in the wrong place, code that does not compile: each is drawn as far as it can be,
+and the rules say what is wrong with it. Insight shows design; making the code work is the target's.
+
+A **read failure** is the other kind, and the only one that stops a run: the target cannot be read
+into a model at all, so there is nothing to draw or check. A root with no marker file or with both
+(_What the target provides_), or code the language's reader cannot load, is one. `rules` prints
+`insight: ` and why, and exits 2; the page shows the same message in place of the map.
 
 ## Kinds of test
 
@@ -105,9 +124,12 @@ dependency run for real, and the Tests view draws it as real.
   `*.slnx` at the root marks a C# target, which insight does not read yet, and a root with both, or
   with neither, is refused with a message naming what it found.
 - `src/infrastructure/staff`, `src/infrastructure/suppliers` and `src/adapters`, one block per
-  folder under each, and `src/index.ts` as the composition root.
+  folder under each, and `src/index.ts` as the composition root. A core, if it has one, is
+  `src/core`. Nothing else sits directly in `src` or `src/infrastructure` (rule 5).
 - Its tests in the four folders above: `features/` always, and `entry-points/`, `core-tests/` and
-  `contracts/` when it has tests of those kinds.
+  `contracts/` when it has tests of those kinds. A file is test code when it imports a test runner
+  (`@cucumber/cucumber`, `node:test`, `vitest`, `jest`, `@jest/globals` or `mocha`); test code
+  that uses code under `src` anywhere else is a break (rule 5).
 - A cucumber `default` profile running `features/**/*.feature`; insight runs each feature under it
   to measure doors.
 - `git`, to list the files outside the hexagon.

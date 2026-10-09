@@ -4,7 +4,7 @@ import { join, sep } from "node:path";
 import { contextOf } from "./analysis/context.js";
 import { mapOf } from "./analysis/map.js";
 import { testsView } from "./analysis/tests.js";
-import { readModel } from "./readers/read.js";
+import { ReadFailure, readModel } from "./readers/read.js";
 
 /**
  * `hexagon-insight serve`: serves the page, and the map it draws, from the working tree of the repository it is started in, as it is now.
@@ -54,7 +54,12 @@ function send(response: ServerResponse, reply: Reply): void {
   response.end(reply.body);
 }
 
+/** A target that cannot be read shows why, in place of the map; anything else shows its stack. */
 function failure(error: unknown): Reply {
+  if (error instanceof ReadFailure) {
+    return { status: 422, type: "text/plain; charset=utf-8", body: error.message };
+  }
+
   const body = error instanceof Error ? (error.stack ?? error.message) : String(error);
 
   return { status: 500, type: "text/plain; charset=utf-8", body };

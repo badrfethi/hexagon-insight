@@ -52,8 +52,26 @@ export function readTypeScript(root: string): Code & Pick<Model, "doors"> {
     declarations: registry.all(),
     compositionRoots: compiled(COMPOSITION_ROOT) ? [COMPOSITION_ROOT] : [],
     steps: [...files.keys()].flatMap(stepsPairOf),
+    claimed: [],
     doors: doorsOf(root),
   };
+}
+
+/**
+ * What makes a file test code: it imports one of these, which `externals.ts` names whole for Node's
+ * own and by package name otherwise.
+ */
+const TEST_RUNNERS: readonly string[] = [
+  "@cucumber/cucumber",
+  "node:test",
+  "vitest",
+  "jest",
+  "@jest/globals",
+  "mocha",
+];
+
+function isTest(externals: readonly string[]): boolean {
+  return externals.some((name) => TEST_RUNNERS.includes(name));
 }
 
 /** The file that wires the application together: what it constructs draws `implements` arrows. */
@@ -82,6 +100,7 @@ function compiledFile(
   const nodes = descendants(file);
   const idsOf = (names: readonly ts.Node[]): readonly string[] =>
     names.flatMap((name) => registry.idOf(declarationOf(checker, name)) ?? []);
+  const externals = externalsOf([file]);
   const constructed = nodes
     .filter(ts.isNewExpression)
     .map((construction) => declarationOf(checker, construction.expression))
@@ -92,8 +111,9 @@ function compiledFile(
     path,
     listed: listed.has(path),
     compiled: true,
+    test: isTest(externals),
     linesOfCode: countLines(file).code,
-    externals: externalsOf([file]),
+    externals,
     declares: file.statements
       .filter((statement) => ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement))
       .flatMap((statement) => registry.idOf(statement) ?? []),
@@ -125,13 +145,15 @@ function typeNames(parameter: ts.ParameterDeclaration): ts.EntityName[] {
 function plainFile(root: string, path: string, listed: boolean): CodeFile {
   const absolute = posix.join(root, path);
   const there = existsSync(absolute);
+  const externals = there ? externalsIn([absolute]) : [];
 
   return {
     path,
     listed,
     compiled: false,
+    test: isTest(externals),
     linesOfCode: there ? codeLinesIn(absolute) : 0,
-    externals: there ? externalsIn([absolute]) : [],
+    externals,
     declares: [],
     imports: [],
     constructorParameterTypes: [],

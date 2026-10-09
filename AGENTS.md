@@ -23,11 +23,11 @@ work in them.
 
 **This is clipper's `tools/insight`, copied whole from clipper commit `ad70e77` and changed only so
 it runs from a target's `node_modules`.** That copy is tagged `v0.1.0` and is the **baseline**: every
-change to what the tool outputs is a deliberate one, named in its PR. Clipper's specifics still in
-the code — the three column folders in `analysis/blocks.ts`, `src/index.ts` as the composition root
-in `readers/typescript/read.ts`, the production service folder in `readers/typescript/doors/doors.ts`
-— are what the milestone v0.2 issues (#5 layout check, #6 C# reader) take apart; leave them in place
-until the issue that owns them.
+change to what the tool outputs is a deliberate one, named in its PR. The three column folders in
+`analysis/blocks.ts` started as clipper's and are now the tool's, held by the layout rule (#5,
+`rules.feature` Rule 5). The TypeScript-only conventions — `src/index.ts` as the composition root in
+`readers/typescript/read.ts`, the production service folder in `readers/typescript/doors/doors.ts`
+— stay in the TypeScript reader; the C# reader (#6) brings its own.
 
 **Issue and ADR numbers in the JSDoc (`#74`, `ADR-0023`) are clipper's**: badrfethi/clipper and its
 `docs/adr/`. Most of the reasoning lives in that JSDoc; read it before changing a function, and
@@ -79,7 +79,10 @@ definitions in `steps/` are open (`steps/AGENTS.md`).
   model written by hand, with no reader. `INSIGHT_MODEL=<file>` makes `readers/read.ts` return that
   JSON file instead of reading the target; such a model measures no doors. It is a test seam, not
   a setting for targets.
-- `boundary.test.ts` holds the line between the two parts, and how the reader is picked.
+- `layout.test.ts` runs the layout rule over variants of that model, each a target of its own under
+  `test/.runs/` (gitignored, removed after the run).
+- `boundary.test.ts` holds the line between the two parts, how the reader is picked, and that
+  `rules` exits 2 on a target it cannot read.
 
 A change to behaviour is also checked against clipper, read-only, at one fixed commit:
 

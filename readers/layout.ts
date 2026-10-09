@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { posix } from "node:path";
 import { COLUMNS } from "../analysis/blocks.js";
-import type { FeatureText, GroupFolder, Layout } from "../analysis/model.js";
+import type { FeatureText, FolderListing, GroupFolder, Layout } from "../analysis/model.js";
 import { KINDS } from "../analysis/test-kinds.js";
 
 /**
@@ -17,19 +17,34 @@ export function layoutOf(root: string): Layout {
     features: KINDS.filter(({ folder }) => existsSync(posix.join(root, folder))).flatMap(
       ({ folder }) => featuresIn(root, folder),
     ),
+    folders: LISTED.map((path) => ({ path, folders: foldersIn(root, path) })),
   };
 }
 
-/** Every folder directly in a column's folder, by name. A column's folder is required of a target. */
+/** The folders whose own folders the layout rule reads (`FolderListing`). */
+const LISTED: readonly FolderListing["path"][] = ["src", "src/infrastructure"];
+
+/**
+ * Every folder directly in a column's folder, by name. A column's folder is required of a target,
+ * and one that is missing is a break of the layout rule, not a failure to read: it holds no groups.
+ */
 function groupsIn(root: string, column: string): readonly GroupFolder[] {
-  return readdirSync(posix.join(root, column), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort()
-    .map((name) => ({
+  return foldersIn(root, column).map((name) => ({
       path: `${column}/${name}`,
       entries: readdirSync(posix.join(root, column, name)),
     }));
+}
+
+/** The names of the folders directly in `path`, sorted; none when it is not there. */
+function foldersIn(root: string, path: string): readonly string[] {
+  const absolute = posix.join(root, path);
+
+  return existsSync(absolute)
+    ? readdirSync(absolute, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort()
+    : [];
 }
 
 function featuresIn(root: string, folder: string): readonly FeatureText[] {

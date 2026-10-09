@@ -9,7 +9,8 @@ disagree (#86: "no second parser").
 
 The hexagon part knows no language. Everything it knows about a target is the `Model` in
 `model.ts`, which a reader in `../readers/` emits: files, declarations and what they import, take,
-construct and implement, line counts, externals, folder entries, feature texts and doors. So no file
+construct and implement, line counts, externals, which files are test code, folder entries and
+listings, the folders the reader claims, feature texts and doors. So no file
 here imports `typescript`, reads the target's files or runs git, and the only thing it imports from
 `../readers/` is `read.ts`, the front door (`../test/boundary.test.ts` fails otherwise). Spawning
 cucumber for the rules (`rules-run.ts`, `run-rules.ts`) is the one process it starts.

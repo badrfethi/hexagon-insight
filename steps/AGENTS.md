@@ -13,7 +13,13 @@ relative to the target's root, an optional `:line`, then `: ` and what is wrong 
 turns each line into a break and marks the blocks it names, so that shape is load-bearing.
 
 **A `Given` over a folder refuses a folder with nothing in it**, so a rule cannot pass vacuously
-after a target moves its code.
+after a target moves its code. The layout rule's `Given`s (`layout.steps.ts`) are the exception:
+that a folder is not there is their own first scenario's break, and the others would only repeat it.
+
+**A wrong target is a break, never a thrown error** (`../README.md`, _Breaks and read failures_). A
+step reads the model it is given and names what is wrong with the design; a target that cannot be
+read at all is a `ReadFailure` from `../readers/read.ts`, which `run-rules.ts` reports before any
+step runs.
 
 **Steps read the analysis, never a second parse.** Each `Given` awaits `this.read()` in `world.ts`,
 which reads the target's model once per run (`../readers/read.ts`) and builds the shared
