@@ -4,4 +4,15 @@
     the target's own Directory.Build.props (its analyzers, its references) are not the reader's.
     Directory.Build.targets and Directory.Packages.props beside it do the same for theirs.
   -->
+
+  <!--
+    Stops the compiler's own search upward, which these files do not: by default every
+    .editorconfig and .globalconfig in a folder above a source file sets the build's analyzer
+    severities, and a target's (crypto-trader makes CA2000 an error) would fail the reader's
+    build (#18).
+  -->
+  <PropertyGroup>
+    <DiscoverEditorConfigFiles>false</DiscoverEditorConfigFiles>
+    <DiscoverGlobalAnalyzerConfigFiles>false</DiscoverGlobalAnalyzerConfigFiles>
+  </PropertyGroup>
 </Project>
