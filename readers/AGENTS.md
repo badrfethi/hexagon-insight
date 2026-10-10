@@ -69,6 +69,12 @@ and `csharp/read.ts`, which builds it and runs it. It ships as source, like the 
 - The empty `Directory.Build.props`, `Directory.Build.targets` and `Directory.Packages.props` stop
   MSBuild from walking up into the target's own: installed, this folder is inside the target, and
   the target's analyzers, warnings-as-errors and central package versions are not the reader's.
+  `Directory.Build.props` also turns off `DiscoverEditorConfigFiles` and
+  `DiscoverGlobalAnalyzerConfigFiles`, so the target's `.editorconfig` and `.globalconfig`, which
+  the compiler otherwise collects from every folder above a source file, set none of the reader's
+  analyzer severities (#18). A check of the reader on a target installs it there (`pnpm add`): run
+  from this repo's own checkout, it is built outside the target and sees none of the target's
+  configuration.
 - `Reader.cs` says what each fact is in C#; `Registry.cs` gives each type its id; `Facts.cs` reads a
   file's facts through the semantic model; `Listing.cs` lists files with git, as
   `typescript/files.ts` does; `Lines.cs` counts lines of code; `Model.cs` mirrors
